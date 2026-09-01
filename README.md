@@ -7,9 +7,11 @@ blocking call: it is `slate:net` and `slate:crypto` and about a thousand lines o
 slate add github.com/slate-language/pg
 ```
 
-**It needs slate 0.0.4 or later**, which is the release that carries `slate:crypto`. A package cannot
-have a native of its own, so SHA-256, HMAC, PBKDF2 and a nonce from the kernel all had to arrive in
-the language before a client could log in to a modern PostgreSQL at all.
+**It needs slate 0.0.5 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
+its own, so SHA-256, HMAC, PBKDF2 and a nonce from the kernel all had to arrive in the language before
+a client could log in to a modern PostgreSQL at all — and 0.0.5 carries the two things TLS needs:
+`startTls`, which upgrades an open socket, and a `connect` that takes a name rather than only an
+address.
 
 ```
 import { pg } from pg
@@ -66,9 +68,37 @@ The exchange is RFC 7677's, checked in both directions — this client verifies 
 as well as sending its own proof, so a server that cannot prove it knew the password is refused
 rather than trusted.
 
-**There is no TLS.** slate has no client-side TLS socket, so this speaks to a database over a
-loopback or a trusted network. A `sslmode=require` deployment is out of reach until slate grows the
-socket, and a connection string's `?sslmode=` is read and ignored rather than quietly honoured.
+## TLS
+
+**PostgreSQL negotiates TLS rather than assuming it**, and that is why a secure `connect` would not
+have done: a connection begins in the clear, sends eight bytes asking, and reads a single byte back —
+`S` for yes, `N` for no. Only then does the handshake start. `sslmode` is libpq's, spelled the same
+way, in an option or in the URL a provider hands out:
+
+```
+val db = await pg({ host: "db.example.com", sslmode: "require", trust: authority })
+val db = await pg("postgres://user:secret@db.example.com/app?sslmode=require")
+```
+
+| mode | what happens |
+|---|---|
+| `disable` | nothing is sent; the connection is in the clear |
+| `allow`, `prefer` | asks; a server that says no is spoken to in the clear |
+| `require`, `verify-ca`, `verify-full` | asks; a server that says no is refused |
+
+**`prefer` is the default**, which is libpq's. Every connection asks, and a server that will not speak
+TLS is spoken to exactly as it was before.
+
+**`require` verifies fully, which libpq's `require` does not.** libpq encrypts without checking who it
+is talking to unless told `verify-full`; slate's TLS offers no way to skip verification, so the three
+strict modes are one behaviour here. **The `host` is what the certificate is checked against**, which
+is why it is a name and not an address — an address works too and is checked against the certificate's
+addresses, but a hosted database is reached by name. A private authority is named with `trust`, as PEM
+text, which is *added* to the machine's own store rather than put in place of it.
+
+**A handshake that fails is not retried in the clear.** libpq drops to an unencrypted connection under
+`prefer` when TLS fails after the server said `S`; a certificate that does not check out is a reason
+to stop rather than a reason to continue quietly.
 
 ## Querying
 
@@ -184,7 +214,6 @@ in a server is a request that never finishes.
 
 ## What is not here
 
-- **TLS**, as above. It is the one real limit.
 - **COPY**, which is refused with a sentence rather than left to desynchronise the connection.
 - **Cursors**, `LISTEN` beyond delivering the notification, and named prepared statements.
 - **A connection pool.** A pool is a program's own arrangement over several connections and needs

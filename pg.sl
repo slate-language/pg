@@ -34,19 +34,40 @@
 //
 // ## What is not here
 //
-// **No TLS**, because slate has no client-side TLS socket -- `listen` can be told a certificate and
-// `connect` cannot. So this speaks to a server over a trusted network or a loopback, and a
-// `sslmode=require` deployment is out of reach until slate grows the socket. It is the one real
-// limit and it is stated here rather than discovered.
-//
 // **No COPY and no cursors.** A `COPY` sent through `query` is refused with a sentence rather than
 // left to desynchronise the connection.
 //
 // **No connection pool.** A pool is a program's own arrangement over several connections and needs
 // nothing from the protocol; what it needs from a driver is that a connection is one object with a
 // `close`, which is what this is.
+//
+// ## TLS, which PostgreSQL negotiates rather than assumes
+//
+// **A connection begins in the clear and asks.** Eight bytes go out -- a length and a magic number
+// where a protocol version would be -- and the server answers a single byte: `S` to say it will
+// speak TLS, `N` to say it will not. Only then does the handshake start, and the startup packet goes
+// after it. That is why this needs `startTls` rather than a secure `connect`: there is nothing to
+// secure until the server has agreed, and by then the socket is open and has been written to.
+//
+// `sslmode` is libpq's and is spelled the same way, in an option or in the URL a provider hands out:
+//
+//     pg({ host: "db.example.com", sslmode: "require", trust: authority })
+//     pg("postgres://user:secret@db.example.com/app?sslmode=require")
+//
+// **`prefer` is the default**, which is libpq's default and not 0.1.0's behaviour -- every connection
+// now asks, and a server that says no is spoken to in the clear exactly as before.
+//
+// **`require` verifies fully, which libpq's `require` does not.** libpq encrypts without checking who
+// it is talking to unless told `verify-full`, on the argument that a man in the middle is somebody
+// else's problem; slate's TLS offers no way to skip verification, so `require`, `verify-ca` and
+// `verify-full` are one behaviour here. A private authority is named with `trust`, as PEM text, which
+// is *added* to the machine's own store rather than put in place of it.
+//
+// **A handshake that fails is not retried in the clear.** libpq drops to an unencrypted connection
+// under `prefer` when TLS fails after the server said `S`; a certificate that does not check out is
+// a reason to stop rather than a reason to continue quietly.
 
-import { connect, onBytes, onError, send, close as closeSocket } from slate:net
+import { connect, onBytes, onError, send, startTls, close as closeSocket } from slate:net
 import { env } from slate:process
 import { message, sealed, putByte, putInt16, putInt32, putBytes, putString, reading, stream,
     byteOf } from "./wire.sl"
@@ -55,6 +76,10 @@ import { scram, freshNonce, md5Password } from "./auth.sl"
 
 // The protocol version this speaks: 3.0, as `196608`, which is what every server since 7.4 answers.
 val Version = 196608
+
+// The number that asks for TLS, sent where a version goes. `1234 << 16 | 5679`, which is how the
+// protocol writes every request that is not a connection -- cancellation is the one beside it.
+val SslRequest = 80877103
 
 // `pg(options)` -- a connection, or the reason there is not one.
 //
@@ -564,6 +589,54 @@ async opened(cfg)
 
     // -- starting ------------------------------------------------------------------------------------
 
+    // -- TLS, asked for before anything else ---------------------------------------------------------
+
+    // **Eight bytes out and one byte back, and both are in the clear.** This is the whole of
+    // PostgreSQL's negotiation: there is no ALPN and no port that means TLS, so a client that assumed
+    // either would be talking to a server that is still waiting to be asked.
+    if cfg.sslmode != "disable"
+        val told = pending()
+        var answered = false
+
+        val ask = message(null)
+
+        putInt32(ask, SslRequest)
+        write(sealed(ask, null))
+
+        // **A reader of its own for one byte, replaced by the framed one below.** Nothing else can
+        // arrive in between -- the server writes the byte and waits -- and replacing a socket's
+        // reader is what `onBytes` is for.
+        onBytes(sock, (chunk) ->
+            if answered then return
+
+            answered = true
+
+            settle(told, if chunk == null || len(chunk) == 0 then -1 else chunk[0]))
+
+        val said = await told
+
+        if said == byteOf("S")
+            // **The host is what the certificate is checked against**, which is why `pg` takes a name
+            // and hands the same name here. A program that resolved it first would have nothing left
+            // to verify.
+            val up = await startTls(sock, { host: cfg.host, trust: cfg.trust })
+
+            if !up.ok
+                closeSocket(sock)
+
+                return { ok: false, error: "the database's certificate was not accepted: " + up.error }
+        elif said == byteOf("E")
+            // A server old enough not to know the request answers an `ErrorResponse` to it.
+            closeSocket(sock)
+
+            return { ok: false, error: "this server is too old to be asked about TLS" }
+        elif cfg.sslmode == "require"
+            closeSocket(sock)
+
+            val why = if said == -1 then "closed the connection rather than answering" else "will not speak TLS"
+
+            return { ok: false, error: "`sslmode` is `require` and this server " + why }
+
     onBytes(sock, heard)
 
     // **A socket error ends the connection with a sentence rather than the `null` a clean close
@@ -648,7 +721,46 @@ settings(options)
         // `psql` on its own connects to something.
         database: given.database ?? (env("PGDATABASE") ?? user),
         application: application,
+
+        // **`PGSSLMODE` is read for the same reason `PGHOST` is**: it is what every tool in the
+        // ecosystem sets, and a program that takes none of them still works where `psql` does.
+        sslmode: sslModeOf(given.sslmode ?? (env("PGSSLMODE") ?? "prefer")),
+
+        // A certificate authority this machine does not already have, **as PEM text and never as a
+        // path**. libpq's `sslrootcert` names a file, and slate's TLS takes the bytes -- so where the
+        // PEM came from is the program's business, which is one `readFileSync` and no guessing about
+        // whose filesystem is being described. Not read from the environment for that reason.
+        trust: given.trust ?? "",
     }
+
+// The `sslmode` a program asked for, as one of the three behaviours there are.
+//
+// **libpq spells six and this has three, and the three that collapse do so because slate's TLS has
+// no way to encrypt without verifying.** `verify-ca` and `verify-full` are therefore what `require`
+// already does. `allow` is folded into `prefer` rather than implemented: libpq's `allow` connects in
+// the clear FIRST and reconnects with TLS only if refused, which is a second connection and an
+// ordering nobody asks for on purpose -- it is what a URL carries when somebody meant "either".
+//
+// **An unknown value is refused rather than treated as the default.** `sslmode=requrie` that quietly
+// meant `prefer` is a connection a deployment believes is encrypted and is not.
+sslModeOf(name)
+    if name == "disable" || name == "prefer" || name == "require" then return name
+    if name == "allow" then return "prefer"
+    if name == "verify-ca" || name == "verify-full" then return "require"
+
+    throw "`sslmode` is one of `disable`, `allow`, `prefer`, `require`, `verify-ca` or `verify-full`, and this is " + name
+
+// The parameters a connection URL carries after `?`.
+//
+// **Only `sslmode` is looked for.** A parameter this driver does not know is a parameter for
+// something else -- `psql` reads a dozen that mean nothing here -- and refusing one would turn a URL
+// that works everywhere into a URL that works everywhere but slate.
+readQuery(out, text)
+    for pair in split(text, "&")
+        val eq = pair.indexOf("=")
+
+        if eq != null && unescaped(pair[0..<eq]) == "sslmode"
+            out.sslmode = unescaped(pair[(eq + 1)..])
 
 asPort(text)
     if text == null then return null
@@ -680,11 +792,13 @@ fromUrl(text)
         val name = rest[(slash + 1)..]
         val q = name.indexOf("?")
 
-        // **Query parameters are read and ignored, not refused.** `?sslmode=prefer` is in every
-        // connection string a hosting provider hands out, and stopping over one would make this
-        // driver unusable with a URL that works everywhere else. What is not supported is the TLS,
-        // and that is said where it matters.
+        // **`sslmode` is read and everything else is ignored, not refused.** A hosting provider's
+        // connection string carries `application_name`, `connect_timeout`, `options` and more, and
+        // stopping over one would make this driver unusable with a URL that works everywhere else.
         out.database = if q == null then name else name[0..<q]
+
+        if q != null then readQuery(out, name[(q + 1)..])
+
         rest = rest[0..<slash]
 
     val at = lastIndexOf(rest, "@")
@@ -759,10 +873,15 @@ unescaped(s)
 fields(r)
     val out = { }
 
-    while true
-        val kind = fromBytes(r.bytes(1)).value
+    // **The terminator is compared as a BYTE and not as text.** A NUL written into the source as a
+    // literal makes the whole file binary to every tool that reads it -- `file` calls it data and a
+    // grep of it answers nothing at all, silently, which reads as the word not being there.
+    while r.left() > 0
+        val tag = r.bytes(1)
 
-        if kind == " " || r.left() < 0 then break
+        if tag[0] == 0 then break
+
+        val kind = fromBytes(tag).value
 
         val text = r.string()
 

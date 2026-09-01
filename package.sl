@@ -1,6 +1,6 @@
 {
     name: "pg",
-    version: "0.1.0",
+    version: "0.2.0",
 
     // The whole package: a connection, and everything else as a method on it. `wire.sl`, `values.sl`
     // and `auth.sl` are reached from here and are deliberately not listed under `modules` -- what a

@@ -12,7 +12,7 @@
 // would land in the teardown as a reset. It reads whole messages with the client's own framing and
 // answers each one.
 
-import { listen, onBytes, send, close as closeSocket, localPort } from slate:net
+import { listen, onBytes, send, startTls, close as closeSocket, localPort } from slate:net
 import { message, sealed, putByte, putInt16, putInt32, putBytes, putString, reading,
     stream, byteOf } from "../wire.sl"
 
@@ -20,9 +20,16 @@ import { message, sealed, putByte, putInt16, putInt32, putBytes, putString, read
 //
 // `kind` is `"startup"` for the first packet, and the message's tag after that -- `"Q"`, `"P"`,
 // `"p"`, `"X"`. Answering `null` sends nothing, which is what a message that needs no reply gets.
-export server(answer)
+//
+// **`secure` is `{ cert, key }` for a server that will speak TLS, and `null` for one that will not.**
+// Both are worth having: the client asks either way now, and what a server says to the question is
+// exactly what the test is about. A server given a certificate answers `S` and upgrades its end; one
+// given nothing answers `N` and carries on in the clear, which is what every test written before TLS
+// existed still wants.
+export server(answer, secure = null)
     val made = listen(0, (sock) ->
         var started = false
+        var asked = false
         val messages = stream()
         var held = []
 
@@ -43,6 +50,37 @@ export server(answer)
                 val size = (held[0] << 24) | (held[1] << 16) | (held[2] << 8) | held[3]
 
                 if len(held) < size then return
+
+                // **The SSLRequest arrives BEFORE the startup packet and is shaped like one**: eight
+                // bytes, a length and a magic number where a protocol version goes. It is answered
+                // with one bare byte and no framing at all, which is the only message in the protocol
+                // that has none.
+                if !asked && size == 8
+                    val code = (held[4] << 24) | (held[5] << 16) | (held[6] << 8) | held[7]
+
+                    if code == 80877103
+                        asked = true
+                        held = held[8..]
+
+                        // **The question itself is offered to `answer`**, so a test can say that a
+                        // connection asked -- or, for `sslmode: "disable"`, that it did not. What it
+                        // gives back is ignored: the reply to this one is a bare byte and not a
+                        // message, and it is decided by `secure` rather than by a fixture.
+                        answer("ssl", reading([]), sock)
+
+                        if secure == null
+                            send(sock, "N")
+                        else
+                            // **Sent before the upgrade and not after.** The byte answering the
+                            // question is the last thing in the clear, and a server that secured its
+                            // end first would encrypt it -- to a client that has not started a
+                            // handshake and would read it as a record it cannot make sense of.
+                            send(sock, "S")
+                            startTls(sock, { cert: secure.cert, key: secure.key })
+
+                        // The client waits for this byte before writing anything else, so there is
+                        // never a startup packet behind it in the same arrival.
+                        return
 
                 val body = held[4..<size]
                 val extra = held[size..]
