@@ -7,6 +7,10 @@ blocking call: it is `slate:net` and `slate:crypto` and about a thousand lines o
 slate add github.com/slate-language/pg
 ```
 
+**It needs slate 0.0.4 or later**, which is the release that carries `slate:crypto`. A package cannot
+have a native of its own, so SHA-256, HMAC, PBKDF2 and a nonce from the kernel all had to arrive in
+the language before a client could log in to a modern PostgreSQL at all.
+
 ```
 import { pg } from pg
 
