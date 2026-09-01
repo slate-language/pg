@@ -7,11 +7,12 @@ blocking call: it is `slate:net` and `slate:crypto` and about a thousand lines o
 slate add github.com/slate-language/pg
 ```
 
-**It needs slate 0.0.5 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
+**It needs slate 0.0.6 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
 its own, so SHA-256, HMAC, PBKDF2 and a nonce from the kernel all had to arrive in the language before
-a client could log in to a modern PostgreSQL at all — and 0.0.5 carries the two things TLS needs:
+a client could log in to a modern PostgreSQL at all; 0.0.5 carries the two things TLS needs,
 `startTls`, which upgrades an open socket, and a `connect` that takes a name rather than only an
-address.
+address; and 0.0.6 carries `md5`, which an older server's login asks for and which this package used
+to write out in slate.
 
 ```
 import { pg } from pg

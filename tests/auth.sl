@@ -4,7 +4,12 @@
 // answered yesterday passes just as happily on a broken implementation; the whole point of a digest
 // and of a challenge-response exchange is that everybody else's agrees.
 
-import { hex, base64, unbase64, md5, md5Password, scram, freshNonce } from "../auth.sl"
+import { hex, base64, unbase64, md5Password, scram, freshNonce } from "../auth.sl"
+
+// **MD5 is the language's now and these vectors stay**, where the implementation they were written
+// against does not. What they pin from here is that the slate this package is installed on answers
+// what a PostgreSQL server computed -- which is the only thing an `md5` login rests on.
+import { md5 } from slate:crypto
 
 @test
 MD5_ANSWERS_THE_VECTORS_RFC_1321_PUBLISHES()

@@ -5,16 +5,18 @@
 // older methods cannot log in to a current server at all.
 //
 // **The cryptography is `slate:crypto`'s and the layout is here**, which is the seam this package is
-// written on: SHA-256, HMAC, PBKDF2 and the nonce come from the language, and hex, base64, MD5 and
+// written on: SHA-256, HMAC, PBKDF2, MD5 and the nonce come from the language, and hex, base64 and
 // the message forms of RFC 5802 are ordinary slate. `slate:jwt` writes its own base64url for the
 // same reason.
 //
-// **MD5 is written out here rather than asked for.** `slate:crypto` has no MD5 and should not grow
-// one: nothing new should use it, and what it is needed for here is a *legacy* server's challenge,
-// which costs two hashes of forty bytes once per connection. That is the whole case for writing it
-// in slate, and it would not survive being needed in a loop.
+// **MD5 WAS WRITTEN OUT HERE UNTIL slate 0.0.6, AND THE ARGUMENT FOR THAT DID NOT SURVIVE THE
+// LANGUAGE GROWING ONE.** The case made here was that `slate:crypto` should not grow an MD5 --
+// nothing new should use it, and what it is wanted for is a legacy server's challenge costing two
+// hashes of forty bytes per connection. That was an argument about what the cost of *writing* one
+// was worth, and `sysl.crypto` grew MD5 in 0.0.98 for this very login, so slate exposes it on the
+// terms `sha1` was already exposed under and a hundred and twenty lines of rounds went with it.
 
-import { sha256, hmac, pbkdf2, randomBytes } from slate:crypto
+import { sha256, hmac, pbkdf2, randomBytes, md5 } from slate:crypto
 
 // -- text encodings ---------------------------------------------------------------------------------
 
@@ -81,105 +83,6 @@ export unbase64(s)
     out
 
 // -- MD5, for a server that asks the old way ---------------------------------------------------------
-
-val Md5K = [
-    3614090360, 3905402710, 606105819, 3250441966, 4118548399, 1200080426, 2821735955, 4249261313,
-    1770035416, 2336552879, 4294925233, 2304563134, 1804603682, 4254626195, 2792965006, 1236535329,
-    4129170786, 3225465664, 643717713, 3921069994, 3593408605, 38016083, 3634488961, 3889429448,
-    568446438, 3275163606, 4107603335, 1163531501, 2850285829, 4243563512, 1735328473, 2368359562,
-    4294588738, 2272392833, 1839030562, 4259657740, 2763975236, 1272893353, 4139469664, 3200236656,
-    681279174, 3936430074, 3572445317, 76029189, 3654602809, 3873151461, 530742520, 3299628645,
-    4096336452, 1126891415, 2878612391, 4237533241, 1700485571, 2399980690, 4293915773, 2240044497,
-    1873313359, 4264355552, 2734768916, 1309151649, 4149444226, 3174756917, 718787259, 3951481745]
-
-val Md5S = [
-    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
-
-val Mask32 = 4294967295
-
-rotated(x, n) = ((x << n) | (x >> (32 - n))) & Mask32
-
-// MD5 of a byte array, as sixteen bytes.
-//
-// **Little-endian throughout, which is what makes it look wrong beside everything else here.** The
-// length is appended as a little-endian count of *bits* and the digest comes out least significant
-// byte first, where the PostgreSQL protocol around it is big-endian everywhere. Getting that
-// backwards produces a hash that is stable, plausible and wrong.
-export md5(bytes)
-    val msg = []
-
-    for b in bytes
-        push(msg, b)
-
-    val bits = len(bytes) * 8
-
-    push(msg, 128)
-
-    while len(msg) % 64 != 56
-        push(msg, 0)
-
-    for i in 0..<8
-        push(msg, (bits >> (8 * i)) & 255)
-
-    var a0 = 1732584193
-    var b0 = 4023233417
-    var c0 = 2562383102
-    var d0 = 271733878
-
-    var at = 0
-
-    while at < len(msg)
-        val m = []
-
-        for j in 0..<16
-            val k = at + j * 4
-
-            push(m, msg[k] | (msg[k + 1] << 8) | (msg[k + 2] << 16) | (msg[k + 3] << 24))
-
-        var a = a0
-        var b = b0
-        var c = c0
-        var d = d0
-
-        for i in 0..<64
-            var f = 0
-            var g = 0
-
-            if i < 16
-                f = (b & c) | ((~b & Mask32) & d)
-                g = i
-            elif i < 32
-                f = (d & b) | ((~d & Mask32) & c)
-                g = (5 * i + 1) % 16
-            elif i < 48
-                f = b ^ c ^ d
-                g = (3 * i + 5) % 16
-            else
-                f = c ^ (b | (~d & Mask32))
-                g = (7 * i) % 16
-
-            f = (f + a + Md5K[i] + m[g]) & Mask32
-            a = d
-            d = c
-            c = b
-            b = (b + rotated(f, Md5S[i])) & Mask32
-
-        a0 = (a0 + a) & Mask32
-        b0 = (b0 + b) & Mask32
-        c0 = (c0 + c) & Mask32
-        d0 = (d0 + d) & Mask32
-        at = at + 64
-
-    val out = []
-
-    for word in [a0, b0, c0, d0]
-        for i in 0..<4
-            push(out, (word >> (8 * i)) & 255)
-
-    out
 
 // What an `AuthenticationMD5Password` is answered with: `md5` and the hex of a hash of a hash.
 //
