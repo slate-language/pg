@@ -46,7 +46,7 @@ async main()
         print(note.id, "|", note.title, "|", note.tags, "|", note.written)
 
     // A refusal is an ANSWER, not a fault: this is what a server turns into a `409`.
-    val clash = await db.query("insert into notes (title) values ($1)", ["first"])
+    val clash = await db.query("insert into notes (title) values ($1)", "first")
 
     print("")
     print("the second `first`:", clash.ok, clash.code)
@@ -54,10 +54,10 @@ async main()
 
     // A transaction is SQL, because it already is.
     await db.query("begin")
-    await db.query("update notes set body = $1 where title = $2", ["changed", "first"])
+    await db.query("update notes set body = $1 where title = $2", "changed", "first")
     await db.query("rollback")
 
-    val after = await db.query("select body from notes where title = $1", ["first"])
+    val after = await db.query("select body from notes where title = $1", "first")
 
     print("")
     print("after the rollback:", after.value.rows[0].body)

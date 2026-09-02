@@ -43,7 +43,7 @@ async main()
 
         val put = await db.query(
             "insert into notes (title, body) values ($1, $2) returning id, title, body",
-            [body.value.title, body.value.body])
+            body.value.title, body.value.body)
 
         if !put.ok
             return {
@@ -57,7 +57,7 @@ async main()
           body: toJSON(put.value.rows[0]) })
 
     app.delete("/notes/:id", async (req) ->
-        val gone = await db.query("delete from notes where id = $1", [req.params.id])
+        val gone = await db.query("delete from notes where id = $1", req.params.id)
 
         if gone.value.count == 0 then { status: 404, body: "no such note" } else { status: 204 })
 
@@ -95,6 +95,6 @@ async answer(query)
 
     { headers: { "Content-Type": "application/json" }, body: toJSON(said.value.rows) }
 
-one(db, id) = db.query("select id, title, body from notes where id = $1", [id])
+one(db, id) = db.query("select id, title, body from notes where id = $1", id)
 
 main()

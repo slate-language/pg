@@ -50,15 +50,15 @@ async main()
     ok("and how many rows", one.value.count, 1)
 
     // -- parameters
-    val two = await db.query("select $1::int + 1 as n, $2::text as t", [41, "ada"])
+    val two = await db.query("select $1::int + 1 as n, $2::text as t", 41, "ada")
 
     ok("a parameter crosses and comes back", toJSON(two.value.rows), "[{\"n\":42,\"t\":\"ada\"}]")
 
-    val quoted = await db.query("select $1::text as t", ["'; drop table users; --"])
+    val quoted = await db.query("select $1::text as t", "'; drop table users; --")
 
     ok("a parameter is never SQL", quoted.value.rows[0].t, "'; drop table users; --")
 
-    val nulled = await db.query("select $1::text as t, $2::text as u", [null, ""])
+    val nulled = await db.query("select $1::text as t, $2::text as u", null, "")
 
     ok("null and the empty string stay apart", toJSON(nulled.value.rows), "[{\"t\":null,\"u\":\"\"}]")
 
@@ -78,11 +78,11 @@ async main()
     ok("a timestamp is one", string(row.ts), "2026-09-01T05:30:00")
     ok("an int8 is whole", row.big, 12345678901234)
 
-    val back = await db.query("select $1::bytea as bs", [bytea([0, 1, 255])])
+    val back = await db.query("select $1::bytea as bs", bytea([0, 1, 255]))
 
     ok("bytes go out and come back", toJSON(back.value.rows[0].bs), "[0,1,255]")
 
-    val arr = await db.query("select $1::text[] as xs", [["a", "b,c", null]])
+    val arr = await db.query("select $1::text[] as xs", ["a", "b,c", null])
 
     ok("an array goes out and comes back as one", toJSON(arr.value.rows[0].xs), "[\"a\",\"b,c\",null]")
 
@@ -95,7 +95,7 @@ async main()
     await db.query("drop table if exists notes")
     await db.query("create table notes (id serial primary key, title text not null unique)")
 
-    val put = await db.query("insert into notes (title) values ($1), ($2)", ["first", "second"])
+    val put = await db.query("insert into notes (title) values ($1), ($2)", "first", "second")
 
     ok("an insert says how many", put.value.count, 2)
 
@@ -104,7 +104,7 @@ async main()
     ok("and they are there", toJSON(read.value.rows), "[{\"title\":\"first\"},{\"title\":\"second\"}]")
 
     // -- errors
-    val clash = await db.query("insert into notes (title) values ($1)", ["first"])
+    val clash = await db.query("insert into notes (title) values ($1)", "first")
 
     ok("a unique violation is an answer", clash.ok, false)
     ok("and carries the SQLSTATE", clash.code, "23505")

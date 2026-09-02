@@ -13,6 +13,7 @@ import { server, authOk, authCleartext, authMd5, authSasl, authSaslContinue, aut
     describe, dataRow, commandComplete, emptyQuery, errorResponse, noticeResponse, notification,
     parseComplete, bindComplete, noData, readyFor, parameterStatus, joined } from "./fake.sl"
 import { md5Password, base64, unbase64, hex } from "../auth.sl"
+import { Decimal } from "../decimal.sl"
 
 // **A test that hangs is worse than a test that fails**, since a socket keeps the program alive and
 // `slate test` would wait for the rest of the run with nothing printed. Three seconds is far longer
@@ -30,7 +31,7 @@ ranLong(what)
     throw "the " + what + " did not finish in time"
 
 // The connection every test here makes, against a fake answering `answer`.
-async connected(answer)
+async connected(answer, decimals = false)
     val fake = server(answer)
     val db = await pg({
         host: "127.0.0.1",
@@ -38,6 +39,7 @@ async connected(answer)
         user: "ada",
         password: "pencil",
         database: "notes",
+        decimals: decimals,
     })
 
     { fake: fake, r: db }
@@ -397,7 +399,7 @@ async A_PARAMETER_MAKES_THIS_THE_EXTENDED_PROTOCOL_AND_null_TRAVELS_AS_MINUS_ONE
         null)
 
     val db = made.r.value
-    val said = await db.query("select $1::text as t, $2::text as u, $3::int as n", [null, "", 7])
+    val said = await db.query("select $1::text as t, $2::text as u, $3::int as n", null, "", 7)
 
     assert(sql == "select $1::text as t, $2::text as u, $3::int as n")
     assert(len(params) == 3)
@@ -407,6 +409,115 @@ async A_PARAMETER_MAKES_THIS_THE_EXTENDED_PROTOCOL_AND_null_TRAVELS_AS_MINUS_ONE
 
     // And a column with no value comes back as `null` rather than as the empty string.
     assert(said.value.rows[0].t == null)
+
+    db.close()
+    closeSocket(made.fake)
+    clearTimeout(guard)
+
+@test
+async A_CONNECTION_TOLD_decimals_HANDS_A_numeric_COLUMN_OVER_AS_ONE()
+    // **The option reaches the column and nothing else changes.** What it buys is arithmetic:
+    // `row.price + row.tax` is exact where two `float8` columns would have rounded, and where two
+    // strings would not have added at all.
+    val guard = late("decimals test")
+
+    // **A NAMED function and not a block lambda**, because a block lambda has to be the last
+    // argument and the flag comes after it -- the same rule the watchdog above is written to.
+    money(kind, r, sock)
+        if kind == "startup" then return authOk()
+
+        if kind == "Q"
+            return joined([
+                describe([{ name: "price", oid: 1700 }, { name: "tax", oid: 1700 }]),
+                dataRow(["19.99", "1.60"]),
+                commandComplete("SELECT 1"),
+                readyFor("I"),
+            ])
+
+        null
+
+    val made = await connected(money, true)
+    val db = made.r.value
+    val said = await db.query("select price, tax from sales")
+    val row = said.value.rows[0]
+
+    assert(row.price is Decimal)
+    assert((row.price + row.tax).toFixed(2) == "21.59")
+
+    db.close()
+    closeSocket(made.fake)
+    clearTimeout(guard)
+
+@test
+async THE_PARAMETERS_ARE_GATHERED_AND_A_COMPUTED_LIST_IS_SPREAD()
+    // **`query` takes its parameters as arguments**, so the common query reads as one thing. A list
+    // a program worked out is spread back -- `db.query(sql, ...values)` -- which is the case the old
+    // list-taking form served directly and the one that had to keep working.
+    //
+    // **An ARRAY parameter is the reading this makes right.** `$1::text[]` is given `["a", "b"]` and
+    // nothing has to be wrapped twice; under the old form that was `[["a", "b"]]`, which is the
+    // shape everybody got wrong once.
+    val guard = late("gathered test")
+
+    var params = []
+
+    val made = await connected((kind, r, sock) ->
+        if kind == "startup" then return authOk()
+
+        if kind == "P"
+            r.string()
+            r.string()
+
+            return null
+
+        if kind == "B"
+            r.string()
+            r.string()
+            r.int16()
+
+            val n = r.int16()
+
+            params = []
+
+            for i in 0..<n
+                val size = r.int32()
+
+                push(params, if size < 0 then null else fromBytes(r.bytes(size)).value)
+
+            return null
+
+        if kind == "S"
+            return joined([
+                parseComplete(),
+                bindComplete(),
+                describe([{ name: "n", oid: 23 }]),
+                dataRow(["1"]),
+                commandComplete("SELECT 1"),
+                readyFor("I"),
+            ])
+
+        null)
+
+    val db = made.r.value
+
+    await db.query("select $1::int as n, $2::text as t", 41, "ada")
+
+    assert(len(params) == 2)
+    assert(params[0] == "41")
+    assert(params[1] == "ada")
+
+    val values = concat([7], ["bee"])
+
+    await db.query("select $1::int as n, $2::text as t", ...values)
+
+    assert(params[0] == "7")
+    assert(params[1] == "bee")
+
+    // One array parameter, which is one argument and not a list of them.
+    await db.query("select $1::text[] as xs", ["a", "b,c"])
+
+    assert(len(params) == 1)
+    assert(params[0] == "{\"a\",\"b,c\"}")
 
     db.close()
     closeSocket(made.fake)

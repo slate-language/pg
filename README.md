@@ -14,12 +14,15 @@ a client could log in to a modern PostgreSQL at all; 0.0.5 carries the two thing
 address; and 0.0.6 carries `md5`, which an older server's login asks for and which this package used
 to write out in slate.
 
+**0.3.0 needs 0.0.8**, whose rest parameters are what let `query` take its parameters as arguments
+and whose operator hooks are what let a `Decimal` answer for `+`.
+
 ```
 import { pg } from pg
 
 async main()
     val db = (await pg("postgres://ada@127.0.0.1/notes")).value
-    val r = await db.query("select id, title from notes where author = $1", ["ada"])
+    val r = await db.query("select id, title from notes where author = $1", "ada")
 
     for row in r.value.rows
         print(row.id, row.title)
@@ -105,8 +108,13 @@ to stop rather than a reason to continue quietly.
 
 ```
 val r = await db.query("select id, title from notes")
-val r = await db.query("select * from notes where id = $1", [7])
+val r = await db.query("select * from notes where id = $1", 7)
+val r = await db.query("select * from notes where id = any($1)", ids)
 ```
+
+**The parameters are the arguments after the SQL**, and a list a program worked out is spread:
+`db.query(sql, ...values)`. An array parameter is then an ordinary one — `$1::text[]` is given
+`["a", "b"]` and nothing has to be wrapped twice.
 
 **Parameters decide which protocol is spoken.** No parameters is a simple `Query`, which may hold
 several statements; any parameters is `Parse`/`Bind`/`Execute`, which may hold one. That is not an
@@ -137,7 +145,7 @@ A query answers a result:
 that is not there are all things a server wants to turn into a status code:
 
 ```
-val put = await db.query("insert into notes (title) values ($1)", [title])
+val put = await db.query("insert into notes (title) values ($1)", title)
 
 if !put.ok && put.code == "23505" then return { status: 409, body: "that title is taken" }
 ```
@@ -193,8 +201,50 @@ the one place the two cannot both be guessed at.
 ```
 import { pg, bytea } from pg
 
-await db.query("insert into files (name, body) values ($1, $2)", ["a.png", bytea(bs)])
+await db.query("insert into files (name, body) values ($1, $2)", "a.png", bytea(bs))
 ```
+
+## `numeric`, and the exact decimal beside it
+
+**A `numeric` column comes back as TEXT by default**, and that loses nothing: it is an
+arbitrary-precision decimal — which is what a money column is — and slate's `real` is a double, so
+reading one as a number would quietly round values the database went to some trouble to keep exact.
+node's `pg` answers a string for the same reason.
+
+**What text cannot do is arithmetic**, so there is a `Decimal`:
+
+```
+import { decimal, Decimal } from pg/decimal
+
+val total = decimal("19.99") + decimal("1.60")     // 21.59, exactly
+
+print(total.toFixed(2))
+```
+
+It answers for `+`, `-`, `*`, `/`, `%`, unary `-` and the four orderings. A value is scaled integer
+units, so every one of those is exact — **except `/`**, which keeps six places by default and
+`divided(b, n)` where a program wants to say. A whole number mixes (`total + 1`); **a real is
+refused**, because 0.1 is not 0.1 in a double and accepting one would put back the rounding this
+type exists to keep out.
+
+**A connection may be told to hand `numeric` columns over as Decimals**, which is the one option
+that changes what a column *is*:
+
+```
+val db = (await pg({ ..., decimals: true })).value
+val r = await db.query("select price, tax from sales")
+
+print((r.value.rows[0].price + r.value.rows[0].tax).toFixed(2))
+```
+
+It is off by default because of what it costs: `toJSON(row)` renders an object where it used to
+render a string, and `string(d)` is the object too — slate has no way for a class to say how it
+prints. A program that turns it on writes `d.toFixed(2)` where it wrote nothing before.
+
+**Eighteen significant digits is the ceiling**, and going past it is a fault rather than a wrap: a
+slate integer is 64 bits and wraps, which is the one thing a money type may not do quietly. A
+`numeric` a Decimal cannot hold — `NaN`, or two hundred digits — keeps its text, which is what every
+value this driver cannot read already does.
 
 ## The rest of the connection
 

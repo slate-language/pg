@@ -22,7 +22,7 @@ import { sha256, hmac, pbkdf2, randomBytes, md5 } from slate:crypto
 
 val Hex = "0123456789abcdef"
 
-export hex(bs)
+export hex(bs: array) -> string
     var out = ""
 
     for b in bs
@@ -36,7 +36,7 @@ val B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 //
 // **Not base64url.** A token is url-safe because it goes in a header; this goes in a SASL message,
 // which is bytes on a socket, and `+` and `/` are what the other end will send.
-export base64(bs)
+export base64(bs: array) -> string
     var out = ""
     var i = 0
 
@@ -64,7 +64,7 @@ export base64(bs)
 // **Anything that is not a base64 character is skipped rather than refused**, which is the one place
 // this is lenient: what arrives is a field of a message the server built, and a client that died on
 // an unexpected newline would be refusing to log in over something that means nothing.
-export unbase64(s)
+export unbase64(s: string) -> array
     val out = []
     var acc = 0
     var bits = 0
@@ -90,7 +90,7 @@ export unbase64(s)
 // makes the stored value a per-user constant and the wire value different on every connection --
 // and it means a stolen `pg_shadow` row still logs in, which is exactly why this method was
 // replaced.
-export md5Password(user, password, salt)
+export md5Password(user: string, password: string, salt: array) -> string
     val inner = hex(md5(toBytes(password + user)))
     val outer = []
 
@@ -115,7 +115,7 @@ export md5Password(user, password, salt)
 // what libpq sends too -- and putting it here as well would mean escaping `=` and `,` in it for no
 // gain. It is an argument rather than a constant so that the exchange RFC 7677 publishes, which uses
 // `n=user`, can be run through this code exactly as written.
-export scram(user, password, nonce)
+export scram(user: string, password: string, nonce: string) -> object
     val first = "n=" + user + ",r=" + nonce
 
     val s = { }
@@ -130,7 +130,10 @@ export scram(user, password, nonce)
     s.final = (serverFirst) ->
         val fields = parsed(serverFirst)
 
-        if !has(fields, "r") || !has(fields, "s") || !has(fields, "i")
+        // **An object pattern rather than three `has` calls**, which says the same thing and says
+        // the types with it: `r`, `s` and `i` are all text off the wire, and a message that has a
+        // field under some other shape is as unusable as one that has none.
+        if !(fields is { r: string, s: string, i: string })
             throw "the server's SCRAM message is missing a field: " + serverFirst
 
         val theirs = fields["r"]
@@ -177,7 +180,7 @@ export scram(user, password, nonce)
 //
 // **Split on the FIRST `=` and not on every one**, since base64 padding puts `=` inside the value:
 // `s=QSXCR+Q6sek8bf92==` is one field and splitting on all of them loses the salt.
-parsed(text)
+parsed(text: string) -> object
     val out = { }
 
     for part in text.split(",")
@@ -194,4 +197,4 @@ parsed(text)
 // out from the clock or from a counter is one an attacker can work out too, and every proof after it
 // is then replayable. `randomBytes` is the reason `slate:crypto` had to exist before this package
 // could.
-export freshNonce() = base64(randomBytes(18))
+export freshNonce() -> string = base64(randomBytes(18))

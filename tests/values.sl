@@ -1,6 +1,7 @@
 // What a column comes back as, and what a parameter goes out as.
 
 import { decoded, encoded, bytea, affected } from "../values.sl"
+import { Decimal, decimal } from "../decimal.sl"
 
 @test
 A_COLUMN_WITH_NO_VALUE_IS_null_AND_NOT_THE_EMPTY_STRING()
@@ -153,6 +154,44 @@ AN_ARRAY_GOES_OUT_AS_AN_ARRAY_LITERAL_WITH_EVERY_ELEMENT_QUOTED()
 @test
 AN_OBJECT_GOES_OUT_AS_JSON()
     assert(encoded({ a: 1, b: "x" }) == "{\"a\":1,\"b\":\"x\"}")
+
+@test
+A_numeric_COLUMN_IS_TEXT_UNLESS_THE_CONNECTION_ASKED_FOR_A_DECIMAL()
+    // **Text is the default and loses nothing**, which is what node's `pg` answers for the same
+    // reason: `numeric` is arbitrary precision and a double is not, so reading one as a number
+    // would round values the database went to some trouble to keep exact.
+    assert(decoded(1700, "19.99") == "19.99")
+    assert(decoded(1700, "19.99") is string)
+
+    // **`decimals` answers a `Decimal` instead**, which is exact AND does arithmetic. It is an
+    // option rather than the default because it changes the type of a column.
+    val d = decoded(1700, "19.99", true)
+
+    assert(d is Decimal)
+    assert(d == decimal("19.99"))
+    assert(d.toFixed(2) == "19.99")
+
+    // An array of them, which goes through the same arm one level down.
+    val xs = decoded(1231, "{1.50,2.25}", true)
+
+    assert(len(xs) == 2)
+    assert(xs[0] == decimal("1.5"))
+
+@test
+A_numeric_A_DECIMAL_CANNOT_HOLD_KEEPS_ITS_TEXT()
+    // **This file's rule for every value it cannot read, applied to one more type.** `NaN` is a
+    // value a PostgreSQL `numeric` may hold and so is a number of two hundred digits; a value the
+    // database has must not become a null it has not.
+    assert(decoded(1700, "NaN", true) == "NaN")
+    assert(decoded(1700, "1234567890123456789012.5", true) == "1234567890123456789012.5")
+
+@test
+A_DECIMAL_PARAMETER_GOES_OUT_AS_ITS_OWN_EXACT_TEXT()
+    // **Before the object arm can turn it into JSON**, which is what an object parameter is. A
+    // Decimal is a number that happens to be held as an object, and `numeric` is what it is for.
+    assert(encoded(decimal("19.99")) == "19.99")
+    assert(encoded(decimal("1.50")) == "1.5")
+    assert(encoded([decimal("1.5"), decimal("2")]) == "{\"1.5\",\"2\"}")
 
 @test
 HOW_MANY_ROWS_A_COMMAND_TOUCHED_IS_THE_LAST_WORD_OF_ITS_TAG()

@@ -17,7 +17,7 @@
 // **The length cannot be written first because it is not known yet**, so `message` records where the
 // four bytes belong and `sealed` goes back and writes them. Writing a guess and correcting it is the
 // alternative and is how a protocol writer ends up with a length that is right except in one branch.
-export message(tag)
+export message(tag) -> array
     val out = []
 
     if tag != null
@@ -32,7 +32,7 @@ export message(tag)
 // **The length counts itself and excludes the tag**, which is the protocol's rule and the one an
 // implementation gets wrong by one in either direction. A length too small leaves the tail of this
 // message to be read as the head of the next.
-export sealed(out, tag)
+export sealed(out: array, tag) -> array
     val start = if tag == null then 0 else 1
     val n = len(out) - start
 
@@ -42,19 +42,19 @@ export sealed(out, tag)
     out[start + 3] = n & 255
     out
 
-export putByte(out, b) = push(out, b & 255)
+export putByte(out: array, b: integer) = push(out, b & 255)
 
-export putInt16(out, n)
+export putInt16(out: array, n: integer)
     push(out, (n >> 8) & 255)
     push(out, n & 255)
 
-export putInt32(out, n)
+export putInt32(out: array, n: integer)
     push(out, (n >> 24) & 255)
     push(out, (n >> 16) & 255)
     push(out, (n >> 8) & 255)
     push(out, n & 255)
 
-export putBytes(out, bs)
+export putBytes(out: array, bs: array)
     for b in bs
         push(out, b & 255)
 
@@ -63,7 +63,7 @@ export putBytes(out, bs)
 // **`toBytes` and not `len`**, because a length in characters is a length in bytes only for ASCII --
 // and a database is full of text that is not. That difference is silent: everything works until the
 // first name with an accent in it.
-export putString(out, s)
+export putString(out: array, s: string)
     putBytes(out, toBytes(s))
     push(out, 0)
 
@@ -74,7 +74,7 @@ export putString(out, s)
 // **A message is read field by field in the order the protocol lists them**, and the cursor is what
 // keeps that reading honest: a field read short leaves the next one misaligned, so every reader here
 // ends by asking the cursor what is left rather than assuming.
-export reading(bs)
+export reading(bs: array) -> object
     var i = 0
 
     val r = { }
@@ -135,7 +135,7 @@ export reading(bs)
 // **A TCP read boundary is not a message boundary**, and a client that assumed it was works on
 // localhost and fails under load, or against a row wider than one packet. Everything is accumulated
 // and `take` answers only whole messages.
-export stream()
+export stream() -> object
     var held = []
 
     val s = { }
@@ -166,4 +166,4 @@ export stream()
 //
 // **A tag is written as a character in the protocol's documentation and travels as a byte**, so
 // spelling one here as `"Q"` rather than as 81 is what keeps this file readable against the manual.
-export byteOf(c) = toBytes(c)[0]
+export byteOf(c: string) -> integer = toBytes(c)[0]

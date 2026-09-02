@@ -3,7 +3,7 @@
 //     import { pg } from pg
 //
 //     val db = (await pg("postgres://ada@127.0.0.1/notes")).value
-//     val r = await db.query("select id, title from notes where author = $1", ["ada"])
+//     val r = await db.query("select id, title from notes where author = $1", "ada")
 //
 //     for row in r.value.rows
 //         print(row.id, row.title)
@@ -91,6 +91,15 @@ export pg(options) = opened(settings(options))
 // Bytes for a `bytea` parameter. An array of small numbers is an array of numbers to everybody who
 // reads it, so this is how a program says it meant bytes.
 export bytea(bs) = asBytea(bs)
+
+// **The exact decimal is `pg/decimal`, a module of its own rather than a name re-exported here.**
+// `Decimal` is a class, so it is a value AND a type under one name, and slate can re-export the
+// value half of that and not the type half -- a program that could make one could not then say
+// `d: Decimal`. A subpath module is the mechanism a package has for a second door, and one door
+// with both halves behind it beats two doors with one each:
+//
+//     import { pg } from pg
+//     import { decimal, Decimal } from pg/decimal
 
 async opened(cfg)
     val made = await connect(cfg.host, cfg.port)
@@ -300,7 +309,7 @@ async opened(cfg)
             val raw = if size < 0 then null else (if text.ok then text.value else null)
 
             val field = if i < len(current.fields) then current.fields[i] else { name: "column" + string(i + 1), oid: 0 }
-            val v = decoded(field.oid, raw)
+            val v = decoded(field.oid, raw, cfg.decimals)
 
             // **A repeated column name keeps the last one**, which is what a program reading
             // `select a.id, b.id` sees in every other driver. `values` is beside it for the query
@@ -487,7 +496,7 @@ async opened(cfg)
 
         write(current.bytes)
 
-    // `db.query(sql)` and `db.query(sql, params)`.
+    // `db.query(sql)` and `db.query(sql, a, b, ...)`.
     //
     // **Parameters are what decides which protocol is spoken**, exactly as node's `pg` decides it: a
     // query with none is a simple `Query`, and one with any is `Parse`/`Bind`/`Execute`. That is not
@@ -497,12 +506,16 @@ async opened(cfg)
     // **A parameter is never interpolated into the SQL**, which is the whole of why they exist: the
     // server parses the statement before it is given a single value, so nothing a parameter contains
     // can become part of the query.
-    async ask(sql, params)
+    //
+    // **`params` arrives as an array whatever the caller wrote**, `query` gathering its arguments --
+    // so there is no longer a `null` here to tell from an empty list, and the two meant the same
+    // thing anyway.
+    async ask(sql: string, params: array)
         if shut then throw "this database connection is closed"
 
         val q = {
             promise: pending(),
-            bytes: if params == null || len(params) == 0 then simple(sql) else extended(sql, params),
+            bytes: if len(params) == 0 then simple(sql) else extended(sql, params),
             rows: [],
             values: [],
             fields: [],
@@ -667,8 +680,13 @@ async opened(cfg)
     val client = { }
 
     // **Stored on the object rather than reached through a proto**, so calling one passes it what it
-    // was given and nothing else -- `db.query(sql)` is `ask(sql, null)` and no receiver.
-    client.query = (sql, params = null) -> ask(sql, params)
+    // was given and nothing else -- `db.query(sql)` is `ask(sql, [])` and no receiver.
+    //
+    // **The parameters are GATHERED**, which is what makes the common query read as one thing:
+    // `db.query("select * from notes where author = $1", "ada")`. A list a program worked out is
+    // spread back, `db.query(sql, ...values)`, and that is the case the old list-taking form served
+    // directly.
+    client.query = (sql, ...params) -> ask(sql, params)
     client.close = () -> bye()
     client.onNotice = (f) ->
         notices = f
@@ -700,7 +718,7 @@ async opened(cfg)
 // **The environment is read last and is not a fallback for a value that was given.** `PGHOST` and
 // its siblings are what libpq reads and what every tool in the ecosystem sets, so a program that
 // takes none of them still works where `psql` does.
-settings(options)
+settings(options) -> object
     val given = if options == null then { } else (if options is string then fromUrl(options) else options)
 
     val {
@@ -731,6 +749,12 @@ settings(options)
         // PEM came from is the program's business, which is one `readFileSync` and no guessing about
         // whose filesystem is being described. Not read from the environment for that reason.
         trust: given.trust ?? "",
+
+        // **Whether a `numeric` column comes back as a `Decimal` rather than as its text.** Off by
+        // default because it changes the type of a column -- `values.sl`'s `Numeric` arm says what
+        // that costs and what it buys. Not read from the environment: it decides what a program's
+        // own code is holding, which is not something a deployment gets to change underneath it.
+        decimals: given.decimals ?? false,
     }
 
 // The `sslmode` a program asked for, as one of the three behaviours there are.
@@ -743,7 +767,7 @@ settings(options)
 //
 // **An unknown value is refused rather than treated as the default.** `sslmode=requrie` that quietly
 // meant `prefer` is a connection a deployment believes is encrypted and is not.
-sslModeOf(name)
+sslModeOf(name: string) -> string
     if name == "disable" || name == "prefer" || name == "require" then return name
     if name == "allow" then return "prefer"
     if name == "verify-ca" || name == "verify-full" then return "require"
@@ -755,7 +779,7 @@ sslModeOf(name)
 // **Only `sslmode` is looked for.** A parameter this driver does not know is a parameter for
 // something else -- `psql` reads a dozen that mean nothing here -- and refusing one would turn a URL
 // that works everywhere into a URL that works everywhere but slate.
-readQuery(out, text)
+readQuery(out: object, text: string)
     for pair in split(text, "&")
         val eq = pair.indexOf("=")
 
@@ -774,7 +798,7 @@ asPort(text)
 // **`postgresql://` and `postgres://` are both spelled in the wild** and neither is more correct, so
 // both are read. Anything else is refused rather than guessed at: a URL that is not a database URL
 // is a configuration mistake, and connecting to whatever it happened to name would be worse.
-fromUrl(text)
+fromUrl(text: string) -> object
     var rest = text
 
     if rest.startsWith("postgres://")
@@ -831,7 +855,7 @@ fromUrl(text)
 // **The LAST `@`, because a password may contain one** -- and an unescaped `@` in a password is
 // common enough that splitting on the first one would send this client to connect to a host named
 // after half of somebody's password.
-lastIndexOf(s, c)
+lastIndexOf(s: string, c: string)
     var found = null
 
     for i in 0..<len(s)
@@ -840,7 +864,7 @@ lastIndexOf(s, c)
     found
 
 // Percent-decoding, since a password in a URL has to escape `@`, `:` and `/`.
-unescaped(s)
+unescaped(s: string) -> string
     var out = ""
     var i = 0
 
@@ -870,7 +894,7 @@ unescaped(s)
 // **The fields are named rather than kept as letters.** `C` is the SQLSTATE code every program
 // branches on -- `23505` for a unique violation -- and a driver that handed back `{ C: "23505" }`
 // would make every program that uses it carry a copy of this table.
-fields(r)
+fields(r: object) -> object
     val out = { }
 
     // **The terminator is compared as a BYTE and not as text.** A NUL written into the source as a
@@ -910,7 +934,7 @@ fields(r)
 said(info) = info.message ?? "the database refused this without saying why"
 
 // The text of a message's remaining bytes.
-text(bs)
+text(bs: array) -> string
     val r = fromBytes(bs)
 
     if !r.ok then throw "the server sent text that is not UTF-8 in a SASL message"
