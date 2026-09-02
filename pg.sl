@@ -92,6 +92,23 @@ export pg(options) = opened(settings(options))
 // reads it, so this is how a program says it meant bytes.
 export bytea(bs) = asBytea(bs)
 
+// -- what a query answers ----------------------------------------------------------------------------
+
+// One statement's result. **`command` and `count` are `null` for a statement that reports neither** --
+// an empty query, or a `BEGIN` -- rather than absent, because a field that is there only sometimes is
+// one every caller has to test for before reading.
+//
+// `results` is on the answer's own value and holds one of these per statement, a simple query being
+// allowed to carry several. It is not here, or the type would describe itself.
+export type Result = { command: any, count: any, rows: array, values: array, fields: array }
+
+// What `db.query` answers: the last statement's result under `value`, or why there is not one.
+//
+// **Only the fields that apply are ever there**, which is why every one of them is optional --
+// reading `r.value` off a refusal is `undefined`, and slate refuses to carry that anywhere. `code` is
+// the SQLSTATE and `info` is the whole `ErrorResponse` with its fields named.
+export type Answer = { ok: boolean, value?: object, error?: string, code?: any, info?: object }
+
 // **The exact decimal is `pg/decimal`, a module of its own rather than a name re-exported here.**
 // `Decimal` is a class, so it is a value AND a type under one name, and slate can re-export the
 // value half of that and not the type half -- a program that could make one could not then say
@@ -395,7 +412,7 @@ async opened(cfg)
 
         next()
 
-    empty() = { command: null, count: null, rows: [], values: [], fields: [] }
+    empty() -> Result = { command: null, count: null, rows: [], values: [], fields: [] }
 
     // -- logging in --------------------------------------------------------------------------------
 
@@ -786,7 +803,7 @@ readQuery(out: object, text: string)
         if eq != null && unescaped(pair[0..<eq]) == "sslmode"
             out.sslmode = unescaped(pair[(eq + 1)..])
 
-asPort(text)
+asPort(text) -> integer | null
     if text == null then return null
 
     val n = number(text)
@@ -855,7 +872,7 @@ fromUrl(text: string) -> object
 // **The LAST `@`, because a password may contain one** -- and an unescaped `@` in a password is
 // common enough that splitting on the first one would send this client to connect to a host named
 // after half of somebody's password.
-lastIndexOf(s: string, c: string)
+lastIndexOf(s: string, c: string) -> integer | null
     var found = null
 
     for i in 0..<len(s)

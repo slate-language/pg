@@ -14,8 +14,20 @@ a client could log in to a modern PostgreSQL at all; 0.0.5 carries the two thing
 address; and 0.0.6 carries `md5`, which an older server's login asks for and which this package used
 to write out in slate.
 
-**0.3.0 needs 0.0.8**, whose rest parameters are what let `query` take its parameters as arguments
-and whose operator hooks are what let a `Decimal` answer for `+`.
+**0.3.0 needs 0.0.9.** 0.0.8's rest parameters are what let `query` take its parameters as arguments
+and its operator hooks are what let a `Decimal` answer for `+`; 0.0.9 is what the exported types
+need — a `type` declaration could not name one imported from another file before it.
+
+```
+import { pg, Answer, Result } from pg
+import { decimal, Decimal } from pg/decimal
+
+// What a query answers, and what a program's own vocabulary is built on.
+reported(a: Answer) -> string = if a.ok then string(len(a.value.rows)) + " rows" else a.error
+```
+
+**`Answer` has every field but `ok` optional**, which is the honest shape: a refusal has no `value`
+at all, and reading one off it would be `undefined` — which slate refuses to carry anywhere.
 
 ```
 import { pg } from pg

@@ -133,7 +133,7 @@ export class Decimal
 //
 // **A real is REFUSED rather than converted**, and the message says why: 0.1 is not 0.1 in a double,
 // so accepting one would put back exactly the rounding this type exists to keep out.
-export decimal(v)
+export decimal(v) -> Decimal
     if v is Decimal then return v
     if v is integer then return Decimal(v, 0)
 
@@ -157,7 +157,7 @@ export decimal(v)
 // PostgreSQL `numeric` may hold, and so is a number of two hundred digits; neither is a Decimal and
 // neither is a defect in the program looking at it. `values.sl` keeps the server's own text for
 // those, which is what it already does for every value it cannot read.
-export readDecimal(text)
+export readDecimal(text) -> Decimal | null
     val r = read(text)
 
     if r.ok then r.value else null
@@ -220,7 +220,7 @@ no(s) = { ok: false, error: "this does not read as a decimal number: " + toJSON(
 //
 // **A whole number is taken and a real is not**, which is the same line `decimal` draws: `total + 1`
 // is exact and `total + 1.5` cannot be. `decimal("1.5")` is what that program writes.
-asDecimal(v)
+asDecimal(v) -> Decimal
     if v is Decimal then return v
     if v is integer then return Decimal(v, 0)
 

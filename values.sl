@@ -43,7 +43,7 @@ val Jsonb = 3802
 // that difference is how a driver turns a missing name into a name that is blank.
 // **`decimals` is the one thing about a column a program gets to choose**, and it is off by default
 // because turning it on changes what a `numeric` column IS. See the `Numeric` arm below.
-export decoded(oid: integer, text, decimals: boolean = false)
+export decoded(oid: integer, text: string | null, decimals: boolean = false)
     if text == null then return null
 
     if oid == Bool then return text == "t"
@@ -106,7 +106,7 @@ export decoded(oid: integer, text, decimals: boolean = false)
 // the element types are -- `text[]` is 1009 on every installation there has ever been. The list is
 // the types this file decodes plus the ones a program is likely to have a column of; anything else
 // keeps its literal, which is what an unknown type does everywhere here.
-elementOf(oid: integer)
+elementOf(oid: integer) -> integer | null
     if oid == 1000 then return Bool
     if oid == 1001 then return Bytea
     if oid == 1005 then return Int2
@@ -330,7 +330,7 @@ export bytea(bs: array) -> string
 // **`INSERT` writes an object id before its count and every other command does not**, which is the
 // one irregularity in the tag: `INSERT 0 3`, `UPDATE 3`, `DELETE 3`, `SELECT 3`. Taking the last
 // word rather than the second is what handles both.
-export affected(tag: string)
+export affected(tag: string) -> integer | null
     val parts = tag.split(" ")
 
     if len(parts) < 2 then return null
