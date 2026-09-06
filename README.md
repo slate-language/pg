@@ -277,13 +277,93 @@ statements, and `status()` is how a program asks where it stands.
 program awaiting an answer that will never come would otherwise wait for the rest of the run, which
 in a server is a request that never finishes.
 
+## Pooling
+
+```
+import { pool } from pg
+
+val p = (await pool("postgres://ada@127.0.0.1/notes", { max: 8 })).value
+
+val r = await p.query("select id, title from notes where author = $1", "ada")
+
+await p.close()
+```
+
+**`pool` takes exactly what `pg` takes**, URL and all, since a pool is the same database reached
+more than once. The four numbers beside it may travel in the same object where the options are one:
+
+```
+val p = (await pool({ host: "db", database: "notes", max: 8 })).value
+```
+
+| | | |
+|---|---|---|
+| `min` | `1` | opened before the first query, and never reaped |
+| `max` | `10` | connections at once; a borrow past this waits |
+| `idle` | `30000` | ms a connection above `min` is kept before it is closed |
+| `timeout` | `10000` | ms a borrow waits once `max` are out |
+
+**These are node-postgres's four under shorter names** — its `min`, `max`, `idleTimeoutMillis` and
+`connectionTimeoutMillis` — because they are the numbers a person arrives already knowing.
+
+**`min` is 1 rather than 0 so that a pool which cannot reach the database says so when it is made.**
+A pool of nothing always succeeds and reports the connection error on the first query, which moves a
+deployment mistake out of start-up and into a request.
+
+### One statement, or one connection
+
+`p.query` borrows a connection, runs one statement and gives it straight back. It answers exactly
+what `db.query` answers, plus the two things that can go wrong before there is a connection at all —
+an open that failed, and a wait that ran out — both as `{ ok: false, error }`.
+
+**`p.with` holds one connection for as long as the closure runs**, which is the transaction case and
+the only reason a program needs to see a connection at all: `begin` and `commit` are two statements
+and they must be the same connection or they mean nothing.
+
+```
+val done = await p.with(async (db) ->
+    await db.query("begin")
+    await db.query("insert into notes (title) values ($1)", title)
+    await db.query("commit")
+
+    true)
+```
+
+What the closure answers comes back under `value`. **What it throws is thrown on**, since that is the
+program's own failure and not the pool's — the connection is given back first.
+
+### What is dropped rather than returned
+
+**A connection that died is not put back**, and neither is one left inside a transaction: a closure
+that threw between `begin` and `commit` leaves the server holding it open, and the next borrower
+would find itself inside somebody else's work. Both are closed, and the next borrow opens a fresh
+one.
+
+**A query that FAILED is not a connection that failed.** A constraint violation, a syntax error and a
+table that is not there all answer `{ ok: false }` on a connection that is perfectly well, and a pool
+that dropped one on every such answer would reconnect for every typo.
+
+### Waiting, and closing
+
+**A borrow past `max` queues rather than opening a connection anyway**, because `max` is usually the
+server's `max_connections` divided among the machines that talk to it. A waiter is given the next
+connection that comes back, oldest first, and is failed after `timeout` — so a program that leaks a
+borrow is a request that answers slowly rather than a server that stops.
+
+**`p.close()` drains.** It fails every waiter at once, closes everything idle, and waits for what is
+out to come back rather than closing it underneath a query. A borrow after that throws, which is
+where calling `query` on a closed connection already goes.
+
+```
+p.size()                        // connections open or opening
+p.free()                        // of those, the ones nobody is using
+p.waiting()                     // borrows queued at `max`
+```
+
 ## What is not here
 
 - **COPY**, which is refused with a sentence rather than left to desynchronise the connection.
 - **Cursors**, `LISTEN` beyond delivering the notification, and named prepared statements.
-- **A connection pool.** A pool is a program's own arrangement over several connections and needs
-  nothing from the protocol; what it needs from a driver is that a connection is one object with a
-  `close`, which is what this is.
 
 ## Tests
 
@@ -297,8 +377,14 @@ with the *protocol* rather than with whichever database happens to be installed,
 no server. The SCRAM test goes further and does the server's half of the exchange, checking the
 client's proof the way PostgreSQL would.
 
+**The fake counts its connections**, which is what makes the pool testable at all: `min`, `max`,
+reuse, the waiter timeout and dropping are every one of them a statement about how many times a
+client logged in.
+
 `check/live.sl` is the other half of that bargain: the same ground against a real PostgreSQL 16 over
-SCRAM-SHA-256, run by hand, because a fixture cannot prove the two halves fit together.
+SCRAM-SHA-256, run by hand, because a fixture cannot prove the two halves fit together. The pool is
+checked there against `pg_stat_activity`, which is the server's own count of what this client
+opened.
 
 ## Licence
 

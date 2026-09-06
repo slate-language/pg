@@ -37,9 +37,13 @@
 // **No COPY and no cursors.** A `COPY` sent through `query` is refused with a sentence rather than
 // left to desynchronise the connection.
 //
-// **No connection pool.** A pool is a program's own arrangement over several connections and needs
-// nothing from the protocol; what it needs from a driver is that a connection is one object with a
-// `close`, which is what this is.
+// **No cursors and no named prepared statements.** Both are a name the server holds between
+// statements, and a program that wants one can say so in SQL.
+//
+// The **pool** used to be in this list, on the argument that it is a program's own arrangement over
+// several connections and needs nothing from the protocol. Both halves of that are still true and
+// neither is a reason for every program to write it: `pool.sl` is the arrangement, written once, and
+// it needs nothing from the protocol there either.
 //
 // ## TLS, which PostgreSQL negotiates rather than assumes
 //
@@ -73,6 +77,7 @@ import { message, sealed, putByte, putInt16, putInt32, putBytes, putString, read
     byteOf } from "./wire.sl"
 import { decoded, encoded, affected, bytea as asBytea } from "./values.sl"
 import { scram, freshNonce, md5Password } from "./auth.sl"
+import { poolOver } from "./pool.sl"
 
 // The protocol version this speaks: 3.0, as `196608`, which is what every server since 7.4 answers.
 val Version = 196608
@@ -87,6 +92,22 @@ val SslRequest = 80877103
 // environment variable and six settings, and a driver that made a program take it apart would be
 // making every program write the same twenty lines.
 export pg(options) = opened(settings(options))
+
+// `pool(options, tuning)` -- several connections a program shares, or the reason there are not any.
+//
+// **The connection options are `pg`'s own and are spelled exactly the same way**, URL and all, since
+// a pool is the same database reached more than once. `tuning` is `min`, `max`, `idle` and `timeout`;
+// where the options are an object it may carry them itself, so the common case is one object:
+//
+//     val p = (await pool({ host: "db", database: "notes", max: 8 })).value
+//     val p = (await pool("postgres://ada@db/notes", { max: 8 })).value
+//
+// The pool is in `pool.sl` and is written against a function that answers a connection rather than
+// against this file, which is what keeps the two from importing each other.
+export pool(options, tuning = null)
+    val cfg = settings(options)
+
+    poolOver(() -> opened(cfg), tuning ?? (if options is string then { } else (options ?? { })))
 
 // Bytes for a `bytea` parameter. An array of small numbers is an array of numbers to everybody who
 // reads it, so this is how a program says it meant bytes.
@@ -713,6 +734,16 @@ async opened(cfg)
 
     client.status = () -> transaction
     client.parameters = () -> parameters
+
+    // Whether this connection can still be used.
+    //
+    // **A query that FAILED is not a connection that failed**, which is why this is a question of its
+    // own rather than something a caller infers from an answer: a constraint violation and a syntax
+    // error both arrive as `{ ok: false }` on a connection that is perfectly well. This is false only
+    // once the socket has gone -- closed by the program, by the server, or by a message this client
+    // could not make sense of. `pool.sl` is what asks, and it is the whole of how the pool tells a
+    // connection worth keeping from one to drop.
+    client.alive = () -> !shut
 
     // `db.close()` -- and every query still waiting is answered.
     //

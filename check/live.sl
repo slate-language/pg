@@ -16,7 +16,7 @@
 // SCRAM-SHA-256, so a check that logged in with `trust` would be checking nothing about the half of
 // this package that took the longest to write.
 
-import { pg, bytea } from "../pg.sl"
+import { pg, pool, bytea } from "../pg.sl"
 
 var failures = 0
 
@@ -159,8 +159,105 @@ async main()
 
     db.close()
 
+    await pooled()
+
     print("")
 
     if failures == 0 then print("all good") else print(failures, "failed")
+
+// The pool, against the real thing.
+//
+// **A pool is the one part of this that a fake server cannot finish proving.** The fake counts
+// logins and that is most of it -- but `max` exists because a real server has `max_connections`, and
+// what a real backend does with a transaction left open is the reason a connection is dropped rather
+// than put back. Both are asked here.
+async pooled()
+    print("")
+    print("the pool")
+
+    val made = await pool({ host: "127.0.0.1", port: 55432, user: "pgtest", password: "slatepw", database: "postgres" },
+        { min: 2, max: 3, idle: 5000, timeout: 500 })
+
+    if !made.ok
+        failures = failures + 1
+
+        print("  FAIL  could not make a pool:", made.error)
+
+        return
+
+    val p = made.value
+
+    ok("the minimum is open before the first query", p.size(), 2)
+
+    val one = await p.query("select 1 as n")
+
+    ok("a pooled query answers", one.value.rows[0].n, 1)
+    ok("and the connection went back", p.free(), 2)
+
+    // `pg_stat_activity` is the server's own count, so this is the pool's arithmetic checked against
+    // the only authority there is.
+    val counted = await p.query("select count(*)::int as n from pg_stat_activity where application_name = 'slate' and datname = 'postgres'")
+
+    ok("and the server sees exactly the pool", counted.value.rows[0].n, 2)
+
+    // Four at once against three connections: one waits and is answered by a connection coming back.
+    val a = p.query("select pg_sleep(0.05), 1 as n")
+    val b = p.query("select pg_sleep(0.05), 2 as n")
+    val c = p.query("select pg_sleep(0.05), 3 as n")
+    val d = p.query("select pg_sleep(0.05), 4 as n")
+
+    ok("four overlapping queries all answer",
+        string((await a).ok) + string((await b).ok) + string((await c).ok) + string((await d).ok),
+        "truetruetruetrue")
+    ok("and no more than `max` were opened", p.size(), 3)
+
+    // A transaction, which is the whole reason `with` exists.
+    val held = await p.with(async (db) ->
+        await db.query("begin")
+        await db.query("create temporary table t (n int)")
+        await db.query("insert into t values (1), (2)")
+        await db.query("commit")
+
+        (await db.query("select count(*)::int as n from t")).value.rows[0].n)
+
+    ok("`with` holds one connection for a whole transaction", held.value, 2)
+
+    // A closure that leaves a transaction open: the server holds it, so the connection cannot go back.
+    val before = p.size()
+    val left = await p.with(async (db) -> (await db.query("begin")).ok)
+
+    ok("a closure that left a transaction open succeeded", left.value, true)
+    ok("and its connection was dropped rather than put back", p.size(), before - 1)
+
+    // A waiter that runs out, which needs a real query slow enough to hold every connection.
+    val slow = []
+
+    var i = 0
+
+    while i < 3
+        push(slow, p.query("select pg_sleep(1)"))
+
+        i = i + 1
+
+    val late = await p.query("select 1 as n")
+
+    ok("a borrow past `max` fails rather than hanging", late.ok, false)
+    ok("and says what it waited for", late.error.indexOf("waited") != null, true)
+
+    for s in slow
+        await s
+
+    await p.close()
+
+    ok("close drains the pool", p.size(), 0)
+
+    var threw = false
+
+    try
+        await p.query("select 1 as n")
+    catch e
+        threw = true
+
+    ok("and refuses a borrow after it", threw, true)
 
 main()
