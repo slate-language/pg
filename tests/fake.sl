@@ -45,11 +45,11 @@ export server(answer, secure = null)
                 for b in chunk
                     push(held, b)
 
-                if len(held) < 4 then return
+                if held.length < 4 then return
 
                 val size = (held[0] << 24) | (held[1] << 16) | (held[2] << 8) | held[3]
 
-                if len(held) < size then return
+                if held.length < size then return
 
                 // **The SSLRequest arrives BEFORE the startup packet and is shaped like one**: eight
                 // bytes, a length and a magic number where a protocol version goes. It is answered
@@ -194,7 +194,7 @@ export readyFor(status)
 export describe(columns)
     val t = message("T")
 
-    putInt16(t, len(columns))
+    putInt16(t, columns.length)
 
     for c in columns
         putString(t, c.name)
@@ -212,7 +212,7 @@ export describe(columns)
 export dataRow(values)
     val d = message("D")
 
-    putInt16(d, len(values))
+    putInt16(d, values.length)
 
     for v in values
         if v == null
@@ -220,7 +220,7 @@ export dataRow(values)
         else
             val bs = toBytes(v)
 
-            putInt32(d, len(bs))
+            putInt32(d, bs.length)
             putBytes(d, bs)
 
     sealed(d, "D")

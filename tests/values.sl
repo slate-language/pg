@@ -174,7 +174,7 @@ A_numeric_COLUMN_IS_TEXT_UNLESS_THE_CONNECTION_ASKED_FOR_A_DECIMAL()
     // An array of them, which goes through the same arm one level down.
     val xs = decoded(1231, "{1.50,2.25}", true)
 
-    assert(len(xs) == 2)
+    assert(xs.length == 2)
     assert(xs[0] == decimal("1.5"))
 
 @test

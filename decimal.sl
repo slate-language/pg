@@ -170,7 +170,7 @@ read(text)
 
     val s = trim(text)
 
-    if len(s) == 0 then return no(s)
+    if s.length == 0 then return no(s)
 
     var i = 0
     var neg = false
@@ -183,36 +183,36 @@ read(text)
     var frac = ""
     var seen = false
 
-    while i < len(s) && isDigit(s[i])
+    while i < s.length && isDigit(s[i])
         whole = whole + s[i]
         seen = true
         i = i + 1
 
-    if i < len(s) && s[i] == "."
+    if i < s.length && s[i] == "."
         i = i + 1
 
-        while i < len(s) && isDigit(s[i])
+        while i < s.length && isDigit(s[i])
             frac = frac + s[i]
             seen = true
             i = i + 1
 
     // **Anything left over is not a number**, which is what refuses `1.2.3`, `NaN`, `1e10` and the
     // two hundred digits of an exponent PostgreSQL writes for a very small `numeric`.
-    if !seen || i != len(s) then return no(s)
+    if !seen || i != s.length then return no(s)
 
-    while len(whole) > 1 && whole[0] == "0"
+    while whole.length > 1 && whole[0] == "0"
         whole = whole[1..]
 
     val digits = (if whole == "0" then "" else whole) + frac
 
-    if len(digits) > MaxDigits
-        return { ok: false, error: "a Decimal holds 18 significant digits and " + s + " has " + string(len(digits)) }
+    if digits.length > MaxDigits
+        return { ok: false, error: "a Decimal holds 18 significant digits and " + s + " has " + string(digits.length) }
 
     val n = number(if digits == "" then "0" else digits)
 
     if n == null then return no(s)
 
-    { ok: true, value: Decimal(if neg then 0 - integer(n) else integer(n), len(frac)) }
+    { ok: true, value: Decimal(if neg then 0 - integer(n) else integer(n), frac.length) }
 
 no(s) = { ok: false, error: "this does not read as a decimal number: " + toJSON(s) }
 
@@ -305,10 +305,10 @@ rendered(units, scale)
     val neg = units < 0
     var body = string(if neg then 0 - units else units)
 
-    while len(body) <= scale
+    while body.length <= scale
         body = "0" + body
 
-    val cut = len(body) - scale
+    val cut = body.length - scale
     val whole = body[0..<cut]
 
     (if neg then "-" else "") + whole + (if scale > 0 then "." + body[cut..] else "")

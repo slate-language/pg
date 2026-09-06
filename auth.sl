@@ -40,13 +40,13 @@ export base64(bs: array) -> string
     var out = ""
     var i = 0
 
-    while i + 2 < len(bs)
+    while i + 2 < bs.length
         val n = (bs[i] << 16) | (bs[i + 1] << 8) | bs[i + 2]
 
         out = out + B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + B64[n & 63]
         i = i + 3
 
-    val left = len(bs) - i
+    val left = bs.length - i
 
     if left == 1
         val n = bs[i] << 16
@@ -69,7 +69,7 @@ export unbase64(s: string) -> array
     var acc = 0
     var bits = 0
 
-    for i in 0..<len(s)
+    for i in 0..<s.length
         val at = B64.indexOf(s[i])
 
         if at != null
@@ -157,7 +157,7 @@ export scram(user: string, password: string, nonce: string) -> object
 
         val proof = []
 
-        for i in 0..<len(clientKey)
+        for i in 0..<clientKey.length
             push(proof, clientKey[i] ^ signature[i])
 
         val serverKey = hmac("SHA-256", salted, "Server Key")

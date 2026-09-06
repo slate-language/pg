@@ -70,7 +70,7 @@ async A_CONNECTION_IS_MADE_AND_A_SIMPLE_QUERY_ANSWERS_ROWS()
     val said = await db.query("select 1 as n")
 
     assert(said.ok)
-    assert(len(said.value.rows) == 1)
+    assert(said.value.rows.length == 1)
     assert(said.value.rows[0].n == 1)
     assert(said.value.command == "SELECT")
     assert(said.value.count == 1)
@@ -205,7 +205,7 @@ async A_SCRAM_LOGIN_IS_CHECKED_BY_A_SERVER_THAT_DOES_THE_OTHER_HALF()
             val signature = hmac("SHA-256", storedKey, auth)
             val clientKey = []
 
-            for i in 0..<len(proof)
+            for i in 0..<proof.length
                 push(clientKey, proof[i] ^ signature[i])
 
             proved = hex(sha256(clientKey)) == hex(storedKey)
@@ -402,7 +402,7 @@ async A_PARAMETER_MAKES_THIS_THE_EXTENDED_PROTOCOL_AND_null_TRAVELS_AS_MINUS_ONE
     val said = await db.query("select $1::text as t, $2::text as u, $3::int as n", null, "", 7)
 
     assert(sql == "select $1::text as t, $2::text as u, $3::int as n")
-    assert(len(params) == 3)
+    assert(params.length == 3)
     assert(params[0] == null)
     assert(params[1] == "")
     assert(params[2] == "7")
@@ -502,7 +502,7 @@ async THE_PARAMETERS_ARE_GATHERED_AND_A_COMPUTED_LIST_IS_SPREAD()
 
     await db.query("select $1::int as n, $2::text as t", 41, "ada")
 
-    assert(len(params) == 2)
+    assert(params.length == 2)
     assert(params[0] == "41")
     assert(params[1] == "ada")
 
@@ -516,7 +516,7 @@ async THE_PARAMETERS_ARE_GATHERED_AND_A_COMPUTED_LIST_IS_SPREAD()
     // One array parameter, which is one argument and not a list of them.
     await db.query("select $1::text[] as xs", ["a", "b,c"])
 
-    assert(len(params) == 1)
+    assert(params.length == 1)
     assert(params[0] == "{\"a\",\"b,c\"}")
 
     db.close()
@@ -542,9 +542,9 @@ async A_ROW_SPLIT_ACROSS_ARRIVALS_IS_STILL_ONE_ROW()
             ])
 
             // Everything but the last nineteen bytes now, the rest on the next turn.
-            send(sock, whole[0..<(len(whole) - 19)])
+            send(sock, whole[0..<(whole.length - 19)])
 
-            return whole[(len(whole) - 19)..]
+            return whole[(whole.length - 19)..]
 
         null)
 
@@ -585,9 +585,9 @@ async SEVERAL_STATEMENTS_IN_ONE_SIMPLE_QUERY_ARE_ALL_KEPT()
     val db = made.r.value
     val said = await db.query("select 1 as n; select 2 as n union select 3")
 
-    assert(len(said.value.results) == 2)
+    assert(said.value.results.length == 2)
     assert(said.value.results[0].rows[0].n == 1)
-    assert(len(said.value.rows) == 2)
+    assert(said.value.rows.length == 2)
     assert(said.value.count == 2)
 
     db.close()
@@ -610,7 +610,7 @@ async AN_EMPTY_QUERY_IS_AN_ANSWER_WITH_NO_ROWS_AND_NO_COMMAND()
 
     assert(said.ok)
     assert(said.value.command == null)
-    assert(len(said.value.rows) == 0)
+    assert(said.value.rows.length == 0)
 
     db.close()
     closeSocket(made.fake)
@@ -660,7 +660,7 @@ async A_NOTICE_IS_NOT_AN_ANSWER_TO_ANYTHING_AND_A_NOTIFICATION_IS_NOT_A_ROW()
     assert(event.pid == 42)
 
     // And the query got its own row and nothing else.
-    assert(len(said.value.rows) == 1)
+    assert(said.value.rows.length == 1)
 
     db.close()
     closeSocket(made.fake)
@@ -815,6 +815,6 @@ async A_CONNECTION_TO_NOTHING_IS_AN_ANSWER()
 // One field out of a SCRAM message, for the fake server to read the client's nonce.
 fieldOf(text, name)
     for part in text.split(",")
-        if part.startsWith(name + "=") then return part[(len(name) + 1)..]
+        if part.startsWith(name + "=") then return part[(name.length + 1)..]
 
     null

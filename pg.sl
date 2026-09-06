@@ -325,7 +325,7 @@ async opened(cfg)
             val text = if size < 0 then null else fromBytes(r.bytes(size))
             val raw = if size < 0 then null else (if text.ok then text.value else null)
 
-            val field = if i < len(current.fields) then current.fields[i] else { name: "column" + string(i + 1), oid: 0 }
+            val field = if i < current.fields.length then current.fields[i] else { name: "column" + string(i + 1), oid: 0 }
             val v = decoded(field.oid, raw, cfg.decimals)
 
             // **A repeated column name keeps the last one**, which is what a program reading
@@ -406,7 +406,7 @@ async opened(cfg)
                 info: done.error,
             })
         else
-            val last = if len(done.results) == 0 then empty() else done.results[len(done.results) - 1]
+            val last = if done.results.length == 0 then empty() else done.results[done.results.length - 1]
 
             settle(done.promise, { ok: true, value: last with { results: done.results } })
 
@@ -465,7 +465,7 @@ async opened(cfg)
             val m = message("p")
 
             putString(m, "SCRAM-SHA-256")
-            putInt32(m, len(toBytes(first)))
+            putInt32(m, toBytes(first).length)
             putBytes(m, toBytes(first))
             write(sealed(m, "p"))
 
@@ -505,7 +505,7 @@ async opened(cfg)
 
     // The next query in the queue, written now that the last exchange is over.
     next()
-        if shut || current != null || len(waiting) == 0 then return
+        if shut || current != null || waiting.length == 0 then return
 
         current = waiting[0]
 
@@ -532,7 +532,7 @@ async opened(cfg)
 
         val q = {
             promise: pending(),
-            bytes: if len(params) == 0 then simple(sql) else extended(sql, params),
+            bytes: if params.length == 0 then simple(sql) else extended(sql, params),
             rows: [],
             values: [],
             fields: [],
@@ -578,7 +578,7 @@ async opened(cfg)
 
         // One format code for every parameter, and text for all of them.
         putInt16(bind, 0)
-        putInt16(bind, len(params))
+        putInt16(bind, params.length)
 
         for p in params
             val text = encoded(p)
@@ -590,7 +590,7 @@ async opened(cfg)
             else
                 val bs = toBytes(text)
 
-                putInt32(bind, len(bs))
+                putInt32(bind, bs.length)
                 putBytes(bind, bs)
 
         // Text for every column that comes back, as above.
@@ -641,7 +641,7 @@ async opened(cfg)
 
             answered = true
 
-            settle(told, if chunk == null || len(chunk) == 0 then -1 else chunk[0]))
+            settle(told, if chunk == null || chunk.length == 0 then -1 else chunk[0]))
 
         val said = await told
 
@@ -875,7 +875,7 @@ fromUrl(text: string) -> object
 lastIndexOf(s: string, c: string) -> integer | null
     var found = null
 
-    for i in 0..<len(s)
+    for i in 0..<s.length
         if s[i] == c then found = i
 
     found
@@ -885,8 +885,8 @@ unescaped(s: string) -> string
     var out = ""
     var i = 0
 
-    while i < len(s)
-        if s[i] == "%" && i + 2 < len(s)
+    while i < s.length
+        if s[i] == "%" && i + 2 < s.length
             val hi = "0123456789abcdef".indexOf(s[i + 1].lower())
             val lo = "0123456789abcdef".indexOf(s[i + 2].lower())
 

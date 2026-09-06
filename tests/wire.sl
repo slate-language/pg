@@ -16,7 +16,7 @@ A_MESSAGE_CARRIES_ITS_TAG_AND_A_LENGTH_THAT_COUNTS_ITSELF()
     val out = sealed(m, "Q")
 
     assert(out[0] == byteOf("Q"))
-    assert(len(out) == 1 + 4 + 8 + 1)
+    assert(out.length == 1 + 4 + 8 + 1)
     assert(out[4] == 13)
     assert(fromBytes(out[5..<13]).value == "select 1")
 
@@ -31,13 +31,13 @@ A_STARTUP_PACKET_HAS_NO_TAG_AND_ITS_LENGTH_STILL_COUNTS_ITSELF()
 
     val out = sealed(m, null)
 
-    assert(len(out) == 8)
+    assert(out.length == 8)
     assert(out[3] == 8)
     assert(out[7] == 0)
 
 @test
 TEXT_IS_MEASURED_IN_BYTES_AND_NOT_IN_CHARACTERS()
-    // **`len` counts characters, which is right, and a protocol counts bytes.** Every message here
+    // **`.length` counts characters, which is right, and a protocol counts bytes.** Every message here
     // works in English and breaks on the first name with an accent in it if that difference is
     // missed.
     val m = message("Q")
@@ -46,7 +46,7 @@ TEXT_IS_MEASURED_IN_BYTES_AND_NOT_IN_CHARACTERS()
 
     val out = sealed(m, "Q")
 
-    assert(len("café") == 4)
+    assert("café".length == 4)
     assert(out[4] == 4 + 5 + 1)
 
 @test
@@ -105,7 +105,7 @@ A_MESSAGE_SPLIT_ACROSS_ARRIVALS_IS_NOT_A_MESSAGE_YET()
     // One byte at a time, which is the worst case a real socket can produce.
     val full = built("select 1")
 
-    for i in 0..<len(full)
+    for i in 0..<full.length
         assert(s.take() == null)
 
         s.feed([full[i]])
@@ -144,7 +144,7 @@ A_MESSAGE_WITH_AN_EMPTY_BODY_IS_STILL_A_MESSAGE()
     val got = s.take()
 
     assert(got.tag == "1")
-    assert(len(got.body) == 0)
+    assert(got.body.length == 0)
 
 built(text)
     val m = message("Q")

@@ -152,11 +152,11 @@ asArray(text, element, decimals)
     var wasQuoted = false
     var done = false
 
-    while i < len(text) && !done
+    while i < text.length && !done
         val c = text[i]
 
         if quoted
-            if c == "\\" && i + 1 < len(text)
+            if c == "\\" && i + 1 < text.length
                 piece = piece + text[i + 1]
                 i = i + 1
             elif c == "\""
@@ -208,7 +208,7 @@ isoish(text: string) -> string
     var out = text.replace(" ", "T")
 
     // An offset of `+HH` or `-HH` and nothing after it.
-    val n = len(out)
+    val n = out.length
 
     if n > 3
         val sign = out[n - 3]
@@ -219,9 +219,9 @@ isoish(text: string) -> string
     out
 
 digits(s: string) -> boolean
-    if len(s) == 0 then return false
+    if s.length == 0 then return false
 
-    for i in 0..<len(s)
+    for i in 0..<s.length
         if "0123456789".indexOf(s[i]) == null then return false
 
     true
@@ -234,7 +234,7 @@ unhex(text: string)
 
     var i = 2
 
-    while i + 1 < len(text)
+    while i + 1 < text.length
         val hi = "0123456789abcdef".indexOf(text[i].lower())
         val lo = "0123456789abcdef".indexOf(text[i + 1].lower())
 
@@ -287,7 +287,7 @@ export encoded(v)
 literal(xs: array) -> string
     var out = "{"
 
-    for i in 0..<len(xs)
+    for i in 0..<xs.length
         if i > 0 then out = out + ","
 
         val x = xs[i]
@@ -304,7 +304,7 @@ literal(xs: array) -> string
 escaped(s: string) -> string
     var out = ""
 
-    for i in 0..<len(s)
+    for i in 0..<s.length
         val c = s[i]
 
         out = out + (if c == "\"" || c == "\\" then "\\" + c else c)
@@ -333,8 +333,8 @@ export bytea(bs: array) -> string
 export affected(tag: string) -> integer | null
     val parts = tag.split(" ")
 
-    if len(parts) < 2 then return null
+    if parts.length < 2 then return null
 
-    val n = number(parts[len(parts) - 1])
+    val n = number(parts[parts.length - 1])
 
     if n == null then null else integer(n)

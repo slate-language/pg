@@ -7,13 +7,14 @@ blocking call: it is `slate:net` and `slate:crypto` and about a thousand lines o
 slate add github.com/slate-language/pg
 ```
 
-**It needs slate 0.0.34 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
+**It needs slate 0.0.35 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
 its own, so SHA-256, HMAC, PBKDF2 and a nonce from the kernel all had to arrive in the language before
 a client could log in to a modern PostgreSQL at all; 0.0.5 carries the two things TLS needs,
 `startTls`, which upgrades an open socket, and a `connect` that takes a name rather than only an
 address; 0.0.6 carries `md5`, which an older server's login asks for and which this package used to
-write out in slate; and 0.0.34 is where an operator method is named for its operator, so `Decimal`
-answers for `+`, `<=>` and `unary_-` rather than for `plus`, `compare` and `negated`.
+write out in slate; 0.0.34 is where an operator method is named for its operator, so `Decimal`
+answers for `+`, `<=>` and `unary_-` rather than for `plus`, `compare` and `negated`; and 0.0.35 is
+where the global `len(x)` and the `.len()` method alias are gone in favor of `.length`.
 
 **0.3.0 needs 0.0.9.** 0.0.8's rest parameters are what let `query` take its parameters as arguments
 and its operator hooks are what let a `Decimal` answer for `+`; 0.0.9 is what the exported types
@@ -24,7 +25,7 @@ import { pg, Answer, Result } from pg
 import { decimal, Decimal } from pg/decimal
 
 // What a query answers, and what a program's own vocabulary is built on.
-reported(a: Answer) -> string = if a.ok then string(len(a.value.rows)) + " rows" else a.error
+reported(a: Answer) -> string = if a.ok then string(a.value.rows.length) + " rows" else a.error
 ```
 
 **`Answer` has every field but `ok` optional**, which is the honest shape: a refusal has no `value`

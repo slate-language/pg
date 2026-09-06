@@ -91,7 +91,7 @@ async answer(query)
 
     if !said.ok then return { status: 500, body: said.error }
 
-    if len(said.value.rows) == 0 then return { status: 404, body: "nothing there" }
+    if said.value.rows.length == 0 then return { status: 404, body: "nothing there" }
 
     { headers: { "Content-Type": "application/json" }, body: toJSON(said.value.rows) }
 

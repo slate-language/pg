@@ -134,7 +134,7 @@ async main()
     val many = await db.query("select 1 as n; select 2 as n; select 3 as n")
 
     ok("the last statement is the answer", many.value.rows[0].n, 3)
-    ok("and every one of them is there", len(many.value.results), 3)
+    ok("and every one of them is there", many.value.results.length, 3)
 
     // -- notices
     var heard = null

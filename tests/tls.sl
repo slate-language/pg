@@ -65,7 +65,7 @@ async A_CONNECTION_IS_UPGRADED_WHERE_THE_SERVER_SAYS_IT_WILL_SPEAK_TLS()
     val said = await db.query("select 1 as n")
 
     assert(said.ok)
-    assert(len(said.value.rows) == 1)
+    assert(said.value.rows.length == 1)
 
     // The server was asked before it was spoken to, and only once.
     assert(seen[0] == "ssl")
@@ -98,7 +98,7 @@ async require_REFUSES_A_SERVER_THAT_WILL_NOT_SPEAK_TLS()
     assert(made.error.contains("will not speak TLS"))
 
     // It never got as far as a startup packet.
-    assert(len(seen) == 1)
+    assert(seen.length == 1)
     assert(seen[0] == "ssl")
 
     closeSocket(fake)

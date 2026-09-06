@@ -34,7 +34,7 @@ export message(tag) -> array
 // message to be read as the head of the next.
 export sealed(out: array, tag) -> array
     val start = if tag == null then 0 else 1
-    val n = len(out) - start
+    val n = out.length - start
 
     out[start] = (n >> 24) & 255
     out[start + 1] = (n >> 16) & 255
@@ -60,7 +60,7 @@ export putBytes(out: array, bs: array)
 
 // Text, as the protocol's `String`: UTF-8 and a zero byte.
 //
-// **`toBytes` and not `len`**, because a length in characters is a length in bytes only for ASCII --
+// **`toBytes` and not `.length`**, because a length in characters is a length in bytes only for ASCII --
 // and a database is full of text that is not. That difference is silent: everything works until the
 // first name with an accent in it.
 export putString(out: array, s: string)
@@ -104,7 +104,7 @@ export reading(bs: array) -> object
     r.string = () ->
         var end = i
 
-        while end < len(bs) && bs[end] != 0
+        while end < bs.length && bs[end] != 0
             end = end + 1
 
         val out = fromBytes(bs[i..<end])
@@ -126,7 +126,7 @@ export reading(bs: array) -> object
 
     r.rest = () -> bs[i..]
 
-    r.left = () -> len(bs) - i
+    r.left = () -> bs.length - i
 
     r
 
@@ -146,12 +146,12 @@ export stream() -> object
 
     // The next whole message, or `null` while one has not all arrived.
     s.take = () ->
-        if len(held) < 5 then return null
+        if held.length < 5 then return null
 
         val size = (held[1] << 24) | (held[2] << 16) | (held[3] << 8) | held[4]
 
         // The tag is not counted by the length, so a message occupies `size + 1` bytes.
-        if len(held) < size + 1 then return null
+        if held.length < size + 1 then return null
 
         val tag = fromBytes([held[0]]).value
         val body = held[5..<(size + 1)]

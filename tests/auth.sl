@@ -45,7 +45,7 @@ AN_MD5_LOGIN_IS_A_HASH_OF_A_HASH_AND_THE_SALT_IS_ONLY_IN_THE_OUTER_ONE()
     val said = md5Password("bob", "secret", [1, 2, 3, 4])
 
     assert(said.startsWith("md5"))
-    assert(len(said) == 35)
+    assert(said.length == 35)
     assert(said == "md5" + hex(md5(joined(toBytes(hex(md5(toBytes("secretbob")))), [1, 2, 3, 4]))))
 
 joined(a, b)
@@ -141,4 +141,4 @@ A_NONCE_IS_FRESH_EVERY_TIME_AND_COMES_FROM_THE_KERNEL()
     // each time -- the failure a wrong implementation has is a nonce computed once, or computed from
     // the clock, and every proof after that is replayable.
     assert(freshNonce() != freshNonce())
-    assert(len(freshNonce()) == 24)
+    assert(freshNonce().length == 24)
