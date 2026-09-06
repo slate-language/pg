@@ -66,8 +66,8 @@ THE_ORDERINGS_ALL_READ_ONE_HOOK()
     assert(decimal("2.5") >= decimal("2.50"))
     assert(decimal("-1") < decimal("0"))
     assert(decimal("10") <= decimal("10.000"))
-    assertEq(decimal("1").compare(decimal("2")), 0 - 1)
-    assertEq(decimal("2").compare(decimal("2.0")), 0)
+    assertEq(decimal("1").<=>(decimal("2")), 0 - 1)
+    assertEq(decimal("2").<=>(decimal("2.0")), 0)
 
 @test
 A_WHOLE_NUMBER_MIXES_AND_A_REAL_IS_REFUSED()

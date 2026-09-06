@@ -7,12 +7,13 @@ blocking call: it is `slate:net` and `slate:crypto` and about a thousand lines o
 slate add github.com/slate-language/pg
 ```
 
-**It needs slate 0.0.6 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
+**It needs slate 0.0.34 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
 its own, so SHA-256, HMAC, PBKDF2 and a nonce from the kernel all had to arrive in the language before
 a client could log in to a modern PostgreSQL at all; 0.0.5 carries the two things TLS needs,
 `startTls`, which upgrades an open socket, and a `connect` that takes a name rather than only an
-address; and 0.0.6 carries `md5`, which an older server's login asks for and which this package used
-to write out in slate.
+address; 0.0.6 carries `md5`, which an older server's login asks for and which this package used to
+write out in slate; and 0.0.34 is where an operator method is named for its operator, so `Decimal`
+answers for `+`, `<=>` and `unary_-` rather than for `plus`, `compare` and `negated`.
 
 **0.3.0 needs 0.0.9.** 0.0.8's rest parameters are what let `query` take its parameters as arguments
 and its operator hooks are what let a `Decimal` answer for `+`; 0.0.9 is what the exported types

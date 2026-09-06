@@ -6,9 +6,10 @@
 // the honest cost of that was arithmetic: a program that wanted to add two amounts asked for
 // `::float8` and accepted the rounding, or added the strings by hand.
 //
-// **What changed is that a slate class can answer for an operator.** `plus`, `minus`, `times`,
-// `dividedBy`, `remainder`, `negated` and `compare` are methods here, so `a + b`, `a < b` and `-a`
-// are ordinary slate written against ordinary values -- and every one of them is exact.
+// **What changed is that a slate class can answer for an operator, and the operator is the method's
+// name.** `+`, `-`, `*`, `/`, `%`, `unary_-` for the prefix minus and `<=>` for all four comparisons
+// are methods here, so `a + b`, `a < b` and `-a` are ordinary slate written against ordinary values
+// -- and every one of them is exact.
 //
 //     val total = decimal("19.99") + decimal("1.60")     // 21.59, not 21.589999999999996
 //
@@ -56,19 +57,19 @@ export class Decimal
         if self.units == 0 then self.scale = 0
 
     // `a + b` and `a - b`, at the wider of the two scales, which loses nothing.
-    plus(self, o) = combined(self, o, 1)
-    minus(self, o) = combined(self, o, 0 - 1)
+    +(self, o) = combined(self, o, 1)
+    -(self, o) = combined(self, o, 0 - 1)
 
     // `a * b`. **The scales add**, which is the whole of decimal multiplication: two amounts to two
     // places make a product to four, and rounding it back is the program's decision rather than
     // this type's.
-    times(self, o)
+    *(self, o)
         val b = asDecimal(o)
 
         Decimal(checkedTimes(self.units, b.units), self.scale + b.scale)
 
     // `a / b`, to `DivisionDigits` places, rounded half away from zero.
-    dividedBy(self, o) = self.divided(o, DivisionDigits)
+    /(self, o) = self.divided(o, DivisionDigits)
 
     // The same division with the scale said out loud, which is what a program that cares writes.
     divided(self, o, digits: integer)
@@ -84,7 +85,7 @@ export class Decimal
         Decimal(rounded(top / b.units), digits)
 
     // `a % b`, exactly, at the wider of the two scales.
-    remainder(self, o)
+    %(self, o)
         val b = asDecimal(o)
 
         if b.units == 0 then throw "this Decimal was divided by zero"
@@ -93,12 +94,13 @@ export class Decimal
 
         Decimal(at(self, s) % at(b, s), s)
 
-    // `-a`.
-    negated(self) = Decimal(0 - self.units, self.scale)
+    // `-a`. **`unary_-` is the prefix minus**, spelled apart from the `-` above because it takes
+    // no other side.
+    unary_-(self) = Decimal(0 - self.units, self.scale)
 
-    // What `<`, `<=`, `>` and `>=` all read. **One hook and four operators**, so a Decimal cannot
+    // What `<`, `<=`, `>` and `>=` all read. **One method and four operators**, so a Decimal cannot
     // order inconsistently with itself.
-    compare(self, o)
+    <=>(self, o)
         val b = asDecimal(o)
         val s = wider(self, b)
         val x = at(self, s)
