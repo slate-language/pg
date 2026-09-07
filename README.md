@@ -4,7 +4,7 @@ A PostgreSQL client written in slate, speaking the wire protocol itself. No libp
 blocking call: it is `slate:net` and `slate:crypto` and about a thousand lines of slate.
 
 ```
-slate add github.com/slate-language/pg
+slate install github.com/slate-language/pg
 ```
 
 **It needs slate 0.0.35 or later.** 0.0.4 carried `slate:crypto` — a package cannot have a native of
