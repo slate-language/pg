@@ -16,7 +16,7 @@ write out in slate; 0.0.34 is where an operator method is named for its operator
 answers for `+`, `<=>` and `unary_-` rather than for `plus`, `compare` and `negated`; and 0.0.35 is
 where the global `len(x)` and the `.len()` method alias are gone in favor of `.length`.
 
-**The floor moves to the release after 0.0.60**, which is where `/` between two integers answers a
+**The floor moves to slate 0.1.0**, which is where `/` between two integers answers a
 real — whole-number division is `\` — and where an integer grows instead of wrapping. Both are
 written into `decimal.sl`: the division it means is spelled `\`, and the 18-digit ceiling is a
 magnitude the type enforces rather than a wrap it detects.
