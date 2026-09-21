@@ -15,19 +15,22 @@
 //
 // **A value is scaled INTEGER units**, so 1.50 is 15 units at a scale of 1. Everything below is
 // integer arithmetic on those units, which is what makes it exact; what it is not is arbitrary
-// precision, since the units are a slate integer and a slate integer is 64 bits. Eighteen
-// significant digits is the ceiling and it is a fault rather than a wrap -- see `checkedTimes`.
+// precision, eighteen significant digits being the ceiling this type states and keeps. A slate
+// integer grows rather than wrapping, so nothing under this enforces that bound: every product and
+// every sum is measured against it here -- see `checkedTimes`.
 //
 // **This is `pg`'s and not the language's, for now.** It is here because `numeric` is here; nothing
 // about it is specific to PostgreSQL, and if a second package ever wants one it should move out
 // whole rather than be copied.
 
-// The largest magnitude the scaled units may reach, which is a slate integer's own ceiling.
+// The digits a Decimal promises, and the magnitude its scaled units may reach.
 //
-// **slate's integer WRAPS**, so an unchecked multiplication would answer a number that is wrong and
-// looks perfectly ordinary. That is the one thing a money type may not do, so every product and
-// every sum here is checked.
+// **slate's integer GROWS rather than wrapping**, so nothing in the machine stops a product here
+// from becoming a number this type cannot render, scale or send. The ceiling is therefore this
+// type's own and is stated as a magnitude: every product and every sum is measured against
+// `MaxUnits` and faults where it is past it, which is what a money type owes.
 val MaxDigits = 18
+val MaxUnits = 9223372036854775807
 
 // How many digits `/` keeps where the division does not come out exactly.
 //
@@ -256,26 +259,28 @@ pow10(n)
 
     out
 
-// `a * b`, faulting rather than wrapping.
+// `a * b`, faulting rather than growing past what a Decimal holds.
 //
-// **The check is a division back**, which is the standard one: where the product wrapped, dividing
-// it by one operand does not give the other. Without it a total could come back negative and look
-// like a number somebody meant.
+// **The check is the product's MAGNITUDE and not a division back.** Dividing the product by one
+// operand and comparing it with the other was the test while a slate integer wrapped -- a wrapped
+// product does not divide back -- and a growing integer always divides back, so that check could
+// never fire again and a total of any size would look like a number somebody meant.
 checkedTimes(a, b)
     if a == 0 || b == 0 then return 0
 
     val out = a * b
 
-    if out \ b != a then throw "this Decimal is too large to hold -- 18 significant digits is the ceiling"
+    if abs(out) > MaxUnits then throw "this Decimal is too large to hold -- 18 significant digits is the ceiling"
 
     out
 
-// `a + b`, faulting rather than wrapping. Two numbers of one sign whose sum has the other sign is
-// the whole of the test, there being no other way for an addition to leave 64 bits.
+// `a + b`, faulting rather than growing past what a Decimal holds. The magnitude again, for
+// `checkedTimes`' reason: two numbers of one sign whose sum has the other sign was the test while
+// a slate integer wrapped, and a sum that grows never changes sign.
 checkedPlus(a, b)
     val out = a + b
 
-    if (a > 0 && b > 0 && out < 0) || (a < 0 && b < 0 && out > 0)
+    if abs(out) > MaxUnits
         throw "this Decimal is too large to hold -- 18 significant digits is the ceiling"
 
     out

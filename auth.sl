@@ -22,7 +22,9 @@ import { sha256, hmac, pbkdf2, randomBytes, md5 } from slate:crypto
 
 val Hex = "0123456789abcdef"
 
-export hex(bs: array) -> string
+// **A digest is `bytes` and a buffer this file built is an `array`**, and both are written the same
+// way here: slate's two byte sequences walk and index alike, so only the annotation has to say so.
+export hex(bs: array | bytes) -> string
     var out = ""
 
     for b in bs
@@ -36,7 +38,7 @@ val B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 //
 // **Not base64url.** A token is url-safe because it goes in a header; this goes in a SASL message,
 // which is bytes on a socket, and `+` and `/` are what the other end will send.
-export base64(bs: array) -> string
+export base64(bs: array | bytes) -> string
     var out = ""
     var i = 0
 
@@ -90,7 +92,7 @@ export unbase64(s: string) -> array
 // makes the stored value a per-user constant and the wire value different on every connection --
 // and it means a stolen `pg_shadow` row still logs in, which is exactly why this method was
 // replaced.
-export md5Password(user: string, password: string, salt: array) -> string
+export md5Password(user: string, password: string, salt: array | bytes) -> string
     val inner = hex(md5(toBytes(password + user)))
     val outer = []
 

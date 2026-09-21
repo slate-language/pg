@@ -54,7 +54,11 @@ export putInt32(out: array, n: integer)
     push(out, (n >> 8) & 255)
     push(out, n & 255)
 
-export putBytes(out: array, bs: array)
+// **Either kind of byte sequence is taken**, because slate has two: an array of small numbers, which
+// is what everything here builds, and `bytes`, which is what `toBytes` and every digest answer. They
+// walk and index alike, so the annotation is the only place the difference shows -- and an annotation
+// naming one of them refuses the other on the spot.
+export putBytes(out: array, bs: array | bytes)
     for b in bs
         push(out, b & 255)
 
@@ -74,7 +78,7 @@ export putString(out: array, s: string)
 // **A message is read field by field in the order the protocol lists them**, and the cursor is what
 // keeps that reading honest: a field read short leaves the next one misaligned, so every reader here
 // ends by asking the cursor what is left rather than assuming.
-export reading(bs: array) -> object
+export reading(bs: array | bytes) -> object
     var i = 0
 
     val r = { }

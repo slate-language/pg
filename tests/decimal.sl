@@ -96,8 +96,9 @@ ROUNDING_IS_HALF_AWAY_FROM_ZERO_IN_BOTH_DIRECTIONS()
 
 @test
 A_NUMBER_TOO_LARGE_TO_HOLD_IS_A_FAULT_AND_NOT_A_WRAP()
-    // **slate's integer is 64 bits and WRAPS**, so an unchecked product would answer a number that
-    // is wrong and looks perfectly ordinary -- which is the one thing a money type may not do.
+    // **A slate integer GROWS**, so an unchecked product would answer a number no larger than it
+    // should be and no smaller -- and one this type cannot render, scale or send. The ceiling is
+    // the type's own, which is the one thing a money type may not leave to the machine.
     var said = ""
 
     try
@@ -107,6 +108,17 @@ A_NUMBER_TOO_LARGE_TO_HOLD_IS_A_FAULT_AND_NOT_A_WRAP()
 
     assert(said.contains("too large to hold"))
 
+    // The same product the other way up. A growing integer has no sign to change, so the negative
+    // direction is a case of its own rather than the positive one read backwards.
+    var negative = ""
+
+    try
+        print(decimal("-999999999999999999") * decimal("10"))
+    catch e
+        negative = e.message
+
+    assert(negative.contains("too large to hold"))
+
     var also = ""
 
     try
@@ -115,6 +127,21 @@ A_NUMBER_TOO_LARGE_TO_HOLD_IS_A_FAULT_AND_NOT_A_WRAP()
         also = e.message
 
     assertEq(also, "")
+
+// **A magnitude test has an edge and a division back did not**, so the value that sits exactly at
+// the ceiling is worth a test of its own: one unit further is refused and this is not.
+@test
+A_PRODUCT_AT_THE_CEILING_IS_HELD_AND_THE_NEXT_ONE_IS_NOT()
+    assertEq((decimal("922337203685477580") * decimal("10")).toFixed(0), "9223372036854775800")
+
+    var said = ""
+
+    try
+        print(decimal("922337203685477581") * decimal("10"))
+    catch e
+        said = e.message
+
+    assert(said.contains("too large to hold"))
 
 @test
 TEXT_THAT_IS_NOT_A_DECIMAL_ANSWERS_NOTHING_RATHER_THAN_GUESSING()

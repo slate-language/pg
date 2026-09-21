@@ -16,6 +16,11 @@ write out in slate; 0.0.34 is where an operator method is named for its operator
 answers for `+`, `<=>` and `unary_-` rather than for `plus`, `compare` and `negated`; and 0.0.35 is
 where the global `len(x)` and the `.len()` method alias are gone in favor of `.length`.
 
+**The floor moves to the release after 0.0.60**, which is where `/` between two integers answers a
+real — whole-number division is `\` — and where an integer grows instead of wrapping. Both are
+written into `decimal.sl`: the division it means is spelled `\`, and the 18-digit ceiling is a
+magnitude the type enforces rather than a wrap it detects.
+
 **0.3.0 needs 0.0.9.** 0.0.8's rest parameters are what let `query` take its parameters as arguments
 and its operator hooks are what let a `Decimal` answer for `+`; 0.0.9 is what the exported types
 need — a `type` declaration could not name one imported from another file before it.

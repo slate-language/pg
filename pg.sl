@@ -982,7 +982,7 @@ fields(r: object) -> object
 said(info) = info.message ?? "the database refused this without saying why"
 
 // The text of a message's remaining bytes.
-text(bs: array) -> string
+text(bs: array | bytes) -> string
     val r = fromBytes(bs)
 
     if !r.ok then throw "the server sent text that is not UTF-8 in a SASL message"

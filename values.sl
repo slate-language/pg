@@ -315,7 +315,7 @@ escaped(s: string) -> string
 //
 // **This is what a program writes to say it meant bytes**, since an array of small numbers is an
 // array of numbers to everybody who reads it and there is no second type to tell them apart by.
-export bytea(bs: array) -> string
+export bytea(bs: array | bytes) -> string
     var out = "\\x"
 
     for b in bs
