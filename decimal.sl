@@ -51,7 +51,7 @@ export class Decimal
             throw "a Decimal's scale is a count of digits after the point, and this is " + string(self.scale)
 
         while self.scale > 0 && self.units % 10 == 0
-            self.units = self.units / 10
+            self.units = self.units \ 10
             self.scale = self.scale - 1
 
         if self.units == 0 then self.scale = 0
@@ -80,9 +80,9 @@ export class Decimal
 
         // One digit past what is wanted, so that the last one can be rounded rather than dropped.
         val shift = digits + 1 + b.scale - self.scale
-        val top = if shift >= 0 then checkedTimes(self.units, pow10(shift)) else self.units / pow10(0 - shift)
+        val top = if shift >= 0 then checkedTimes(self.units, pow10(shift)) else self.units \ pow10(0 - shift)
 
-        Decimal(rounded(top / b.units), digits)
+        Decimal(rounded(top \ b.units), digits)
 
     // `a % b`, exactly, at the wider of the two scales.
     %(self, o)
@@ -266,7 +266,7 @@ checkedTimes(a, b)
 
     val out = a * b
 
-    if out / b != a then throw "this Decimal is too large to hold -- 18 significant digits is the ceiling"
+    if out \ b != a then throw "this Decimal is too large to hold -- 18 significant digits is the ceiling"
 
     out
 
@@ -282,9 +282,9 @@ checkedPlus(a, b)
 
 // One digit too many, rounded away half up. `125` is `13` and `-125` is `-13`.
 rounded(tenths)
-    if tenths < 0 then return 0 - ((0 - tenths + 5) / 10)
+    if tenths < 0 then return 0 - ((0 - tenths + 5) \ 10)
 
-    (tenths + 5) / 10
+    (tenths + 5) \ 10
 
 // This value's units at exactly `n` places, rounding where that is fewer than it has.
 rescaled(d, n)
@@ -295,7 +295,7 @@ rescaled(d, n)
 
     // Down to one digit past what is wanted, then round that one away.
     while over > 1
-        out = out / 10
+        out = out \ 10
         over = over - 1
 
     rounded(out)
