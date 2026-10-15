@@ -365,8 +365,71 @@ p.free()                        // of those, the ones nobody is using
 p.waiting()                     // borrows queued at `max`
 ```
 
+## Migrations
+
+A directory of numbered SQL files, applied in order and once each, over a connection or a pool:
+
+```
+migrations/
+    0001_people.up.sql
+    0001_people.down.sql
+    0002_pets.up.sql
+```
+
+```
+import { pg, migrate, rollback, migrationStatus } from pg
+
+val db = (await pg(env("PG_URL"))).value
+
+val r = await migrate(db, "migrations")              // { ok, value: { applied } }
+val s = await migrationStatus(db, "migrations")      // { ok, value: { applied, pending, changed, missing } }
+val b = await rollback(db, "migrations", { steps: 1 })   // { ok, value: { reverted } }
+```
+
+**The number is the order and the identity.** It is compared as a number, so `10_toys` runs after
+`2_pets` whatever their names sort as; the `.down.sql` is optional. Files that do not end in `.sql`
+are ignored. A `.sql` file not named `NNNN_name.up.sql` or `NNNN_name.down.sql`, two files with one
+number, and a `.down.sql` with no `.up.sql` are refused with a sentence naming the file.
+
+**What ran is recorded in `schema_migrations(version, name, checksum, applied_at)`**, made where it
+is absent. The checksum is the SHA-256 of the `.up.sql`.
+
+- **Each migration is its own transaction, with its row.** One that fails leaves nothing behind, the
+  ones after it stay pending, and the answer is `{ ok: false, error, code, info, applied }`, where
+  `applied` lists what this run applied before the failure.
+- **An applied migration whose file has changed is refused**, by name, before anything runs. It is
+  never re-run and never skipped: put back what was applied, or write the change as a new migration.
+  `migrationStatus` lists it under `changed`, and `rollback` will not undo it either.
+- **`pg_advisory_lock` is held for the whole run**, so two processes started at once, such as two
+  replicas of one deployment, apply each migration once between them. The second one waits and then
+  finds nothing to do. `{ lock: n }` uses a key of your own, for a database with two independent sets
+  of migrations.
+- **`rollback` undoes the newest first**, `steps` of them (1 by default), each in its own transaction
+  with the deletion of its row. If any of them has no `.down.sql`, the rollback is refused before any
+  of them runs.
+- **A pool is asked for one connection for the whole run**, because an advisory lock belongs to a
+  session.
+
+Everything read from the directory or the database comes back as an answer. A `steps` that is not a
+positive count, or a connection left inside a transaction, is a fault. A migration cannot contain
+anything PostgreSQL refuses inside a transaction (`create index concurrently`, for example).
+
+**A package cannot ship a command**, because the `scripts` that `slate run` reads belong to the
+project, so `examples/migrate.sl` is the file a project copies:
+
+```
+PG_URL=postgres://ada@127.0.0.1/notes slate migrate.sl up
+PG_URL=postgres://ada@127.0.0.1/notes slate migrate.sl down 2
+PG_URL=postgres://ada@127.0.0.1/notes slate migrate.sl status
+```
+
+It reads `MIGRATIONS` for the directory (`migrations` by default) and `PG_URL` or `DATABASE_URL` for
+the database. It exits 0 when the database is where it was asked to be, 1 when it is not, and 2 for
+a command it does not understand.
+
 ## What is not here
 
+- **Seeders and factories.**
 - **COPY**, which is refused with a sentence rather than left to desynchronise the connection.
 - **Cursors**, `LISTEN` beyond delivering the notification, and named prepared statements.
 
@@ -389,7 +452,8 @@ client logged in.
 `check/live.sl` is the other half of that bargain: the same ground against a real PostgreSQL 16 over
 SCRAM-SHA-256, run by hand, because a fixture cannot prove the two halves fit together. The pool is
 checked there against `pg_stat_activity`, which is the server's own count of what this client
-opened.
+opened. `check/migrate.sl` does the same for migrations: it shows that a failure keeps nothing and
+that two runners started together apply each migration once.
 
 ## Licence
 

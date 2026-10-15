@@ -78,6 +78,7 @@ import { message, sealed, putByte, putInt16, putInt32, putBytes, putString, read
 import { decoded, encoded, affected, bytea as asBytea } from "./values.sl"
 import { scram, freshNonce, md5Password } from "./auth.sl"
 import { poolOver } from "./pool.sl"
+import { migrate as migrateOn, rollback as rollbackOn, migrationStatus as statusOn } from "./migrate.sl"
 
 // The protocol version this speaks: 3.0, as `196608`, which is what every server since 7.4 answers.
 val Version = 196608
@@ -108,6 +109,13 @@ export pool(options, tuning = null)
     val cfg = settings(options)
 
     poolOver(() -> opened(cfg), tuning ?? (if options is string then { } else (options ?? { })))
+
+// Migrations -- a directory of `NNNN_name.up.sql` files applied in order, once each, over a
+// connection or a pool. They are in `migrate.sl`, which takes whatever `pg` or `pool` answered and
+// imports neither, for the reason `pool.sl` does not: so this file can import it and there is one door.
+export migrate(db, dir: string, options: object = { }) = migrateOn(db, dir, options)
+export rollback(db, dir: string, options: object = { }) = rollbackOn(db, dir, options)
+export migrationStatus(db, dir: string) = statusOn(db, dir)
 
 // Bytes for a `bytea` parameter. An array of small numbers is an array of numbers to everybody who
 // reads it, so this is how a program says it meant bytes.
